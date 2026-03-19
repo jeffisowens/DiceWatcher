@@ -1,0 +1,22 @@
+{
+  "name": "dicewatcher",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev:web": "pnpm --filter @dicewatcher/web dev",
+    "build:web": "pnpm --filter @dicewatcher/web build",
+    "build:foundry": "pnpm --filter @dicewatcher/foundry-module build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

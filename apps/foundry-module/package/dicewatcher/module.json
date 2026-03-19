@@ -1,0 +1,18 @@
+{
+  "id": "dicewatcher",
+  "title": "DiceWatcher",
+  "description": "Accepts external physical dice results from the DiceWatcher web app.",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "authors": [
+    {
+      "name": "DiceWatcher"
+    }
+  ],
+  "esmodules": [
+    "dist/index.js"
+  ]
+}
