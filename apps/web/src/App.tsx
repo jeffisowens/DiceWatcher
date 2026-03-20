@@ -411,6 +411,65 @@ export function App() {
     userId: session.userId,
     value: selectedValue
   });
+  const retakeReasons: string[] = [];
+
+  if (analysisState === "done") {
+    if (recognitionResult.value === null) {
+      retakeReasons.push("No confident die value was found.");
+    }
+
+    if (recognitionResult.confidence > 0 && recognitionResult.confidence < 0.55) {
+      retakeReasons.push("Recognition confidence is still low.");
+    }
+
+    const joinedNotes = recognitionResult.notes.join(" ").toLowerCase();
+
+    if (
+      joinedNotes.includes("falling back to the broader search crop") ||
+      joinedNotes.includes("die retry") ||
+      joinedNotes.includes("too weak")
+    ) {
+      retakeReasons.push("The die crop looked weak, so a retake may be more reliable.");
+    }
+  }
+
+  const shouldRecommendRetake = retakeReasons.length > 0;
+  const recognitionStatus =
+    analysisState === "running"
+      ? {
+          title: "Analyzing capture",
+          detail: "Checking the die crop and counting pip candidates now.",
+          tone: "pending"
+        }
+      : analysisState === "error"
+        ? {
+            title: "Analysis failed",
+            detail: "This image could not be analyzed. Try another capture.",
+            tone: "warning"
+          }
+        : analysisState === "done" && recognitionResult.value !== null && !shouldRecommendRetake
+          ? {
+              title: "Looks good",
+              detail: "Recognition looks stable enough to review and send.",
+              tone: "good"
+            }
+          : analysisState === "done" && recognitionResult.value !== null
+            ? {
+                title: "Review carefully",
+                detail: "A result was found, but this capture may still need a retake.",
+                tone: "warning"
+              }
+            : analysisState === "done"
+              ? {
+                  title: "Retake recommended",
+                  detail: "No reliable die value was found from this image.",
+                  tone: "warning"
+                }
+              : {
+                  title: "Awaiting capture",
+                  detail: "Capture or upload one die image to start recognition.",
+                  tone: "idle"
+                };
 
   return (
     <main className="app-shell">
@@ -514,6 +573,12 @@ export function App() {
         </div>
 
         {cameraError ? <p className="status warning">{cameraError}</p> : null}
+        <div className="capture-tips">
+          <div className="analysis-label">Capture tips</div>
+          <p>Keep one die centered inside the guide and leave a little space around it.</p>
+          <p>Use even lighting and avoid strong shadows crossing the die face.</p>
+          <p>If the die looks soft or partly clipped, retake before sending.</p>
+        </div>
         <p className="status">
           Source: {captureSource === "camera" ? "Live camera" : captureSource === "upload" ? "Uploaded fixture" : "None"}.
           {" "}
@@ -559,6 +624,18 @@ export function App() {
         </div>
 
         {analysisError ? <p className="status warning">{analysisError}</p> : null}
+        <div className={`review-status review-status-${recognitionStatus.tone}`}>
+          <div className="analysis-label">{recognitionStatus.title}</div>
+          <p>{recognitionStatus.detail}</p>
+        </div>
+        {shouldRecommendRetake ? (
+          <div className="retake-warning">
+            <div className="analysis-label">Retake recommended</div>
+            {retakeReasons.map((reason) => (
+              <p key={reason}>{reason}</p>
+            ))}
+          </div>
+        ) : null}
         {recognitionResult.notes.length > 0 ? (
           <div className="analysis-notes">
             {recognitionResult.notes.map((note) => (

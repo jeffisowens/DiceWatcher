@@ -407,7 +407,37 @@ Mitigations:
 - Start with controlled image fixtures
 - Validate Foundry bridge with mock data before CV work
 
-## 14. Immediate Next Steps
+## 14. Current Prototype Benchmark
+
+As of March 20, 2026, the local-only prototype has reached the following benchmark:
+
+- Foundry bridge accepts paired browser rolls and posts them into chat
+- Web app supports camera capture, uploaded fixtures, review/correction, and send-to-Foundry
+- Controlled `d6` benchmark set for faces `1` through `6` is passing
+- Reused face-4 stress set is passing except for one low-quality image where the die is not reliably localized
+- Web app now surfaces low-confidence or weak-crop cases with a retake recommendation
+
+Current benchmark interpretation:
+
+- The local-only recognizer is strong enough for MVP-style repeated testing in controlled conditions
+- The main remaining failure mode is poor localization on certain low-quality or shadow-heavy images
+- For MVP, that remaining miss is acceptable if the UX clearly recommends retaking weak captures
+
+Known limitations to keep in mind:
+
+- One die only
+- `d6` only
+- Controlled tray/background still expected
+- Uneven lighting, blur, or die shadows can still degrade localization
+- Manual review/correction remains part of the intended MVP flow
+
+Recommended benchmark sets to preserve:
+
+- Canonical pass set: one saved fixture per face from `1` through `6`
+- Robustness set: the reused multi-shot face-4 batch
+- Known hard failure set: the remaining low-quality image that fails die localization
+
+## 15. Immediate Next Steps
 
 1. Initialize the monorepo structure.
 2. Scaffold `apps/web`, `apps/foundry-module`, and `packages/shared`.
@@ -415,7 +445,14 @@ Mitigations:
 4. Implement a mock-roll path from web app to Foundry.
 5. Only then begin the first `d6` image-processing prototype.
 
-## 15. Locked decisions for now
+Now that those steps are complete, the next product-focused priorities are:
+
+1. Manual end-to-end Foundry testing with the current polished launcher and web review flow
+2. Capture guidance and retake UX improvements
+3. Optional recent-roll or history UX in the Foundry launcher
+4. Saving and reusing the current benchmark batches for future regression checks
+
+## 16. Locked decisions for now
 
 - Separate browser app and Foundry module
 - `d6` first

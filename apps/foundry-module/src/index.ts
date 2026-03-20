@@ -192,6 +192,23 @@ function updateBridgeStatus(state: BridgeEventState) {
   if (detailNode) {
     detailNode.textContent = state.detail;
   }
+
+  const toneNode = statusCard.querySelector<HTMLElement>('[data-role="status-tone"]');
+
+  if (toneNode) {
+    toneNode.textContent =
+      state.status === "accepted"
+        ? "Ready to send"
+        : state.status === "rejected"
+          ? "Needs review"
+          : "Waiting for app";
+    toneNode.style.color =
+      state.status === "accepted"
+        ? "#9de2b0"
+        : state.status === "rejected"
+          ? "#ffd38a"
+          : "#bcb7af";
+  }
 }
 
 function reportRejectedRoll(reason: string, context?: unknown) {
@@ -352,34 +369,47 @@ function mountLauncherPanel() {
   panel.style.color = "#f5f0e8";
   panel.style.fontFamily = "system-ui, sans-serif";
   panel.style.userSelect = "none";
+  panel.style.backdropFilter = "blur(14px)";
 
   const session = getSessionDetails();
   const launcherUrl = getLauncherUrl();
+  const launcherOrigin = getConfiguredWebAppOrigin();
 
   panel.innerHTML = `
-    <div data-role="drag-handle" style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin:-4px -4px 12px; padding:4px; cursor:grab;">
+    <div data-role="drag-handle" style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin:-4px -4px 14px; padding:4px; cursor:grab;">
       <div>
         <div style="font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:#ffb98d; margin-bottom:8px;">
           DiceWatcher
         </div>
-        <div style="font-size:20px; font-weight:700;">
-          Dev Launcher
+        <div style="font-size:20px; font-weight:700; margin-bottom:4px;">
+          Bridge Launcher
+        </div>
+        <div style="font-size:12px; line-height:1.4; color:#bcb7af;">
+          Open the camera app, test the bridge, and watch the latest roll state.
         </div>
       </div>
       <div style="padding:6px 8px; border-radius:999px; border:1px dashed rgba(255,255,255,0.18); font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#bcb7af;">
         Drag
       </div>
     </div>
-    <p style="margin:0 0 12px; color:#d8d4ce; line-height:1.4;">
-      Open the camera app, then send a captured or test d6 roll back into Foundry.
-    </p>
-    <div style="margin-bottom:12px; padding:10px; border-radius:12px; background:rgba(255,255,255,0.06);">
-      <div style="font-size:12px; color:#ffb98d; text-transform:uppercase; margin-bottom:4px;">Session</div>
-      <div style="font-size:14px;">${session.sessionId}</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+      <div style="padding:10px; border-radius:12px; background:rgba(255,255,255,0.06);">
+        <div style="font-size:12px; color:#ffb98d; text-transform:uppercase; margin-bottom:4px;">Session</div>
+        <div style="font-size:13px; line-height:1.35;">${session.sessionId}</div>
+      </div>
+      <div style="padding:10px; border-radius:12px; background:rgba(255,255,255,0.06);">
+        <div style="font-size:12px; color:#ffb98d; text-transform:uppercase; margin-bottom:4px;">User</div>
+        <div style="font-size:13px; line-height:1.35;">${session.userLabel ?? session.userId ?? "Unpaired"}</div>
+      </div>
     </div>
-    <div data-role="bridge-status" style="margin-bottom:12px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04);">
-      <div data-role="status-title" style="font-size:13px; font-weight:700; margin-bottom:4px;">${bridgeEventState.title}</div>
+    <div data-role="bridge-status" style="margin-bottom:12px; padding:12px; border-radius:14px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04);">
+      <div data-role="status-tone" style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#bcb7af; margin-bottom:6px;">Waiting for app</div>
+      <div data-role="status-title" style="font-size:14px; font-weight:700; margin-bottom:4px;">${bridgeEventState.title}</div>
       <div data-role="status-detail" style="font-size:12px; line-height:1.4; color:#bcb7af;">${bridgeEventState.detail}</div>
+    </div>
+    <div style="margin-bottom:12px; padding:10px; border-radius:12px; background:linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03)); border:1px solid rgba(255,255,255,0.08);">
+      <div style="font-size:12px; color:#ffb98d; text-transform:uppercase; margin-bottom:6px;">Capture flow</div>
+      <div style="font-size:12px; line-height:1.45; color:#d8d4ce;">1. Open the web app. 2. Capture or upload one die. 3. Review the result. 4. Send it back here.</div>
     </div>
     <div style="display:flex; gap:8px; margin-bottom:8px;">
       <button type="button" data-action="open" style="flex:1; border:0; border-radius:999px; padding:10px 12px; font:inherit; font-weight:700; cursor:pointer; background:linear-gradient(135deg,#ffd38a 0%,#ff9f6b 100%); color:#1a1612;">
@@ -389,9 +419,11 @@ function mountLauncherPanel() {
         Send Test Roll
       </button>
     </div>
-    <p style="margin:0; font-size:12px; line-height:1.4; color:#bcb7af; word-break:break-all;">
-      ${launcherUrl}
-    </p>
+    <div style="padding:10px; border-radius:12px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);">
+      <div style="font-size:12px; color:#ffb98d; text-transform:uppercase; margin-bottom:4px;">Web app</div>
+      <div style="font-size:12px; line-height:1.4; color:#d8d4ce; word-break:break-all;">${launcherOrigin}</div>
+      <div style="font-size:11px; line-height:1.4; color:#8f8a84; margin-top:4px;">Launch URL includes the active session and Foundry origin pairing.</div>
+    </div>
   `;
 
   panel.querySelector('[data-action="open"]')?.addEventListener("click", () => {
