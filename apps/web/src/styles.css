@@ -479,3 +479,57 @@ pre {
     min-height: 240px;
   }
 }
+
+.die-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.die-row {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  padding: 0.75rem 1rem 1rem;
+}
+
+.die-row legend {
+  padding: 0 0.35rem;
+  color: #ffb98d;
+}
+
+.face-buttons {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.face-button {
+  min-height: 3rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  color: #f5f0e8;
+  background: #252831;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.face-button.selected {
+  color: #1a1612;
+  background: linear-gradient(135deg, #ffd38a 0%, #ff9f6b 100%);
+  border-color: transparent;
+}
+
+.face-button:disabled {
+  cursor: default;
+}
+
+.footer {
+  margin-top: 1.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.footer a {
+  color: #bcb7af;
+}

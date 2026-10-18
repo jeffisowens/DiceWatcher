@@ -62,9 +62,33 @@ export const pairAckSchema = z.object({
 
 export type PairAck = z.infer<typeof pairAckSchema>;
 
+// Foundry → camera: the request is no longer pending. "fulfilled" means the
+// camera's dice were taken; "cancelled" means the player typed the results in
+// Foundry or closed the resolver.
+export const rollClosedSchema = z.object({
+  v: versionSchema,
+  type: z.literal("roll-closed"),
+  requestId: z.string().min(1),
+  outcome: z.enum(["fulfilled", "cancelled"])
+});
+
+export type RollClosed = z.infer<typeof rollClosedSchema>;
+
+// Foundry → camera: a fulfillment was refused (e.g. dice did not match).
+export const rollRejectedSchema = z.object({
+  v: versionSchema,
+  type: z.literal("roll-rejected"),
+  requestId: z.string().min(1),
+  reason: z.string()
+});
+
+export type RollRejected = z.infer<typeof rollRejectedSchema>;
+
 export const protocolMessageSchema = z.discriminatedUnion("type", [
   rollRequestSchema,
   rollFulfillmentSchema,
+  rollClosedSchema,
+  rollRejectedSchema,
   pairHelloSchema,
   pairAckSchema
 ]);

@@ -99,10 +99,23 @@ type RollFulfillment = {
   }[];
 };
 
+// Foundry → camera: the request is no longer pending
+type RollClosed = {
+  v: 1;
+  type: "roll-closed";
+  requestId: string;
+  outcome: "fulfilled" | "cancelled"; // cancelled: typed in Foundry or resolver closed
+};
+
+// Foundry → camera: a fulfillment was refused
+type RollRejected = { v: 1; type: "roll-rejected"; requestId: string; reason: string };
+
 // pairing
 type PairHello = { v: 1; type: "pair-hello"; secret: string; client: "camera-web" };
 type PairAck  = { v: 1; type: "pair-ack"; userId: string; userName: string };
 ```
+
+Pairing links put `peer`, `secret` and an optional `signal` server in the URL fragment, so the secret never reaches the web host. Values typed by the player are sent with `confidence: 0` and `corrected: true`.
 
 Totals are never sent; Foundry computes them. The module rejects a fulfillment whose dice don't match the open request.
 
