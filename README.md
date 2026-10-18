@@ -10,7 +10,7 @@ The initial goal is a narrow, reliable MVP:
 - User confirmation before sending
 - Foundry VTT module bridge for ingesting results
 
-Project planning docs live in [docs/project-spec.md](C:\Users\ifcja\OneDrive\Documents\Projects\DiceWatcher\docs\project-spec.md).
+Project planning docs live in [docs/project-spec.md](docs/project-spec.md). The October 2026 engineering review is in [docs/review-2026-10.md](docs/review-2026-10.md).
 
 ## Workspace
 
@@ -26,7 +26,4 @@ docs/
 
 ## Next Steps
 
-1. Install Node.js and `pnpm`.
-2. Run `pnpm install`.
-3. Build the mock roll path from the web app into the Foundry module.
-4. Start the first `d6` still-image recognition prototype.
+See the milestones in [docs/project-spec.md](docs/project-spec.md#8-milestones). Next up is M0 (tests, lint, CI) and the M1 spike: Foundry's dice fulfillment API plus a phone-to-Foundry WebRTC connection.
