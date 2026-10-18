@@ -1,7 +1,7 @@
 import {
-  type ExternalRollPayload,
   buildLauncherQuery,
-  createMockExternalRoll,
+  createExternalRoll,
+  type ExternalRollPayload,
   isExternalRollMessage,
   isExternalRollPayload
 } from "@dicewatcher/shared";
@@ -38,7 +38,8 @@ let launcherWindow: Window | null = null;
 let bridgeEventState: BridgeEventState = {
   status: "idle",
   title: "Awaiting roll",
-  detail: "Open the camera app, then send a captured or test roll to see bridge status here."
+  detail:
+    "Open the camera app, then send a captured or test roll to see bridge status here."
 };
 
 function registerSettings() {
@@ -48,7 +49,7 @@ function registerSettings() {
     scope: "client",
     config: true,
     type: Boolean,
-    default: true
+    default: false
   });
 
   game.settings.register(MODULE_ID, "webAppUrl", {
@@ -176,8 +177,12 @@ function updateBridgeStatus(state: BridgeEventState) {
         ? "rgba(255, 145, 123, 0.08)"
         : "rgba(255,255,255,0.04)";
 
-  const titleNode = statusCard.querySelector<HTMLElement>('[data-role="status-title"]');
-  const detailNode = statusCard.querySelector<HTMLElement>('[data-role="status-detail"]');
+  const titleNode = statusCard.querySelector<HTMLElement>(
+    '[data-role="status-title"]'
+  );
+  const detailNode = statusCard.querySelector<HTMLElement>(
+    '[data-role="status-detail"]'
+  );
 
   if (titleNode) {
     titleNode.textContent = state.title;
@@ -402,7 +407,7 @@ function mountLauncherPanel() {
     .querySelector('[data-action="test-roll"]')
     ?.addEventListener("click", () => {
       handleExternalRoll(
-        createMockExternalRoll({
+        createExternalRoll({
           sessionId: session.sessionId,
           userId: session.userId,
           value: 6
@@ -418,7 +423,9 @@ function mountLauncherPanel() {
     applyLauncherPosition(panel, savedPosition);
   }
 
-  const dragHandle = panel.querySelector<HTMLElement>('[data-role="drag-handle"]');
+  const dragHandle = panel.querySelector<HTMLElement>(
+    '[data-role="drag-handle"]'
+  );
 
   if (dragHandle) {
     enableLauncherDragging(panel, dragHandle);
@@ -442,7 +449,9 @@ function registerWindowBridge() {
     }
 
     if (launcherWindow && event.source !== launcherWindow) {
-      reportRejectedRoll("Message source did not match the active launcher window.");
+      reportRejectedRoll(
+        "Message source did not match the active launcher window."
+      );
       return;
     }
 

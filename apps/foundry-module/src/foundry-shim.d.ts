@@ -5,7 +5,11 @@ declare const Hooks: {
 
 declare const game: {
   settings: {
-    register(namespace: string, key: string, data: Record<string, unknown>): void;
+    register(
+      namespace: string,
+      key: string,
+      data: Record<string, unknown>
+    ): void;
     get(namespace: string, key: string): unknown;
   };
   user?: {

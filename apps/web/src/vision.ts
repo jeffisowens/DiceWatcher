@@ -71,10 +71,17 @@ export async function recognizeD6FromDataUrl(
 
   sourceContext.drawImage(image, 0, 0);
 
-  const searchSize = Math.floor(Math.min(sourceCanvas.width, sourceCanvas.height) * 0.72);
+  const searchSize = Math.floor(
+    Math.min(sourceCanvas.width, sourceCanvas.height) * 0.72
+  );
   const searchX = Math.floor((sourceCanvas.width - searchSize) / 2);
   const searchY = Math.floor((sourceCanvas.height - searchSize) / 2);
-  const searchImage = sourceContext.getImageData(searchX, searchY, searchSize, searchSize);
+  const searchImage = sourceContext.getImageData(
+    searchX,
+    searchY,
+    searchSize,
+    searchSize
+  );
   const grayscale = createGrayscaleBuffer(searchImage);
   const candidateSearch = findLikelyDieCandidates(
     grayscale,
@@ -109,7 +116,10 @@ export async function recognizeD6FromDataUrl(
       index,
       candidates.length
     );
-    const resultScore = scoreRecognizedCandidate(candidateResult, currentCandidate.score);
+    const resultScore = scoreRecognizedCandidate(
+      candidateResult,
+      currentCandidate.score
+    );
     const candidateLabel = `${currentCandidate.method} candidate ${index + 1}/${candidates.length}`;
     candidateSummaries.push(
       `${candidateLabel} score ${resultScore.toFixed(2)} from die ${currentCandidate.score.toFixed(2)}, confidence ${candidateResult.confidence.toFixed(2)}, pips ${candidateResult.pipCount}, value ${candidateResult.value ?? "none"}`
@@ -126,7 +136,7 @@ export async function recognizeD6FromDataUrl(
     return {
       ...bestResult,
       notes: [
-      ...bestResult.notes,
+        ...bestResult.notes,
         ...candidateSearch.notes,
         ...candidateSummaries,
         `Chose ${bestCandidateLabel} with combined score ${bestResultScore.toFixed(2)}`
@@ -157,7 +167,12 @@ function analyzeSquareRegion(
 
   const meanBrightness = sum / pixelCount;
   const threshold = Math.max(24, Math.min(170, meanBrightness * 0.68));
-  const darkMask = createAdaptiveDarkMask(grayscale, width, height, meanBrightness);
+  const darkMask = createAdaptiveDarkMask(
+    grayscale,
+    width,
+    height,
+    meanBrightness
+  );
 
   const components = findConnectedComponents(darkMask, width, height);
   const regionArea = width * height;
@@ -165,7 +180,12 @@ function analyzeSquareRegion(
   const maxArea = regionArea * 0.11;
   const candidatePips = components.filter((component) => {
     const aspectRatio = component.width / component.height;
-    const localContrastScore = scoreLocalPipContrast(grayscale, width, height, component);
+    const localContrastScore = scoreLocalPipContrast(
+      grayscale,
+      width,
+      height,
+      component
+    );
     const nearEdge =
       component.centerX < width * 0.08 ||
       component.centerX > width * 0.92 ||
@@ -191,36 +211,46 @@ function analyzeSquareRegion(
     candidatePips,
     Math.max(width, height) * 0.11
   );
-  const preservedFourCorners = findBestFourCornerSubset(groupedPips, width, height);
+  const preservedFourCorners = findBestFourCornerSubset(
+    groupedPips,
+    width,
+    height
+  );
   const exactFourPassThrough =
     candidatePips.length === 4 && groupedPips.length === 4;
   const exactFivePassThrough =
     candidatePips.length === 5 && groupedPips.length === 5;
   const trustGroupedFourPips =
     exactFourPassThrough ||
-    (groupedPips.length === 4 && scoreD6Layout(groupedPips, width, height) >= 0.44);
+    (groupedPips.length === 4 &&
+      scoreD6Layout(groupedPips, width, height) >= 0.44);
   const trustGroupedFivePips =
     exactFivePassThrough ||
-    (groupedPips.length === 5 && scoreD6Layout(groupedPips, width, height) >= 0.42);
+    (groupedPips.length === 5 &&
+      scoreD6Layout(groupedPips, width, height) >= 0.42);
   const basePips =
     preservedFourCorners ??
-    ((trustGroupedFourPips || trustGroupedFivePips)
+    (trustGroupedFourPips || trustGroupedFivePips
       ? groupedPips
       : groupedPips.length >= 1 &&
-    groupedPips.length <= 4 &&
-    consistencyScore(groupedPips) > 0.42
+          groupedPips.length <= 4 &&
+          consistencyScore(groupedPips) > 0.42
+        ? groupedPips
+        : selectLikelyPips(groupedPips, width, height));
+  const scoredPips =
+    trustGroupedFourPips || trustGroupedFivePips
       ? groupedPips
-      : selectLikelyPips(groupedPips, width, height));
-  const scoredPips = trustGroupedFourPips || trustGroupedFivePips
-    ? groupedPips
-    : applyLayoutSanity(basePips, width, height);
+      : applyLayoutSanity(basePips, width, height);
   const mergedPipCount = scoredPips.length;
-  const value = mergedPipCount >= 1 && mergedPipCount <= 6 ? mergedPipCount : null;
+  const value =
+    mergedPipCount >= 1 && mergedPipCount <= 6 ? mergedPipCount : null;
   const componentQuality =
     scoredPips.length === 0
       ? 0
       : scoredPips.reduce((score, component) => {
-          const aspectPenalty = Math.abs(1 - component.width / component.height);
+          const aspectPenalty = Math.abs(
+            1 - component.width / component.height
+          );
           const fillPenalty = Math.abs(0.62 - component.fillRatio);
           return score + Math.max(0, 1 - aspectPenalty - fillPenalty);
         }, 0) / scoredPips.length;
@@ -247,13 +277,13 @@ function analyzeSquareRegion(
       ? "Branch: preserved four-corner subset"
       : exactFourPassThrough
         ? "Branch: exact four-candidate pass-through"
-      : exactFivePassThrough
-        ? "Branch: exact five-candidate pass-through"
-      : trustGroupedFourPips
-        ? "Branch: trusted grouped four pips directly"
-      : trustGroupedFivePips
-        ? "Branch: trusted grouped five pips directly"
-        : "Branch: standard selection/layout flow"
+        : exactFivePassThrough
+          ? "Branch: exact five-candidate pass-through"
+          : trustGroupedFourPips
+            ? "Branch: trusted grouped four pips directly"
+            : trustGroupedFivePips
+              ? "Branch: trusted grouped five pips directly"
+              : "Branch: standard selection/layout flow"
   ];
 
   if (value === null) {
@@ -302,7 +332,11 @@ function renderDebugImage(
   context.fillRect(0, 0, canvas.width, 26);
   context.fillStyle = "#f5f0e8";
   context.font = "12px Segoe UI";
-  context.fillText(`thr ${Math.round(threshold)} | cand ${candidatePips.length} | merged ${groupedPips.length} | final ${finalPips.length}`, 8, 17);
+  context.fillText(
+    `thr ${Math.round(threshold)} | cand ${candidatePips.length} | merged ${groupedPips.length} | final ${finalPips.length}`,
+    8,
+    17
+  );
 
   drawComponents(context, candidatePips, "rgba(255, 184, 108, 0.95)", 1.5);
   drawComponents(context, groupedPips, "rgba(123, 211, 137, 0.95)", 2);
@@ -344,7 +378,9 @@ function selectLikelyPips(
     return components;
   }
 
-  const sortedAreas = [...components].map((component) => component.area).sort((left, right) => left - right);
+  const sortedAreas = [...components]
+    .map((component) => component.area)
+    .sort((left, right) => left - right);
   const medianArea = sortedAreas[Math.floor(sortedAreas.length / 2)];
   const centerX = width / 2;
   const centerY = height / 2;
@@ -357,12 +393,17 @@ function selectLikelyPips(
         Math.hypot(component.centerX - centerX, component.centerY - centerY) /
         Math.hypot(centerX, centerY);
       const centerScore = 1 - Math.min(centerDistance, 1);
-      const aspectScore = 1 - Math.min(Math.abs(1 - component.width / component.height), 1);
+      const aspectScore =
+        1 - Math.min(Math.abs(1 - component.width / component.height), 1);
       const fillScore = 1 - Math.min(Math.abs(0.62 - component.fillRatio), 1);
 
       return {
         component,
-        score: areaScore * 0.35 + centerScore * 0.2 + aspectScore * 0.2 + fillScore * 0.25,
+        score:
+          areaScore * 0.35 +
+          centerScore * 0.2 +
+          aspectScore * 0.2 +
+          fillScore * 0.25,
         areaRatio
       };
     })
@@ -379,7 +420,10 @@ function selectLikelyPips(
   const selected = (filtered.length > 0 ? filtered : scored)
     .slice(0, Math.min(6, components.length))
     .map((entry) => entry.component)
-    .sort((left, right) => left.centerY - right.centerY || left.centerX - right.centerX);
+    .sort(
+      (left, right) =>
+        left.centerY - right.centerY || left.centerX - right.centerX
+    );
 
   return selected;
 }
@@ -396,7 +440,10 @@ function applyLayoutSanity(
   let bestSet = components;
   let bestScore = scoreD6Layout(components, width, height);
 
-  if (components.length === 4 && looksLikeFourCorners(components, width, height)) {
+  if (
+    components.length === 4 &&
+    looksLikeFourCorners(components, width, height)
+  ) {
     return components;
   }
 
@@ -405,7 +452,9 @@ function applyLayoutSanity(
       components.length >= 6 ? 0.28 : components.length >= 4 ? 0.2 : 0.12;
 
     for (let index = 0; index < components.length; index += 1) {
-      const subset = components.filter((_, candidateIndex) => candidateIndex !== index);
+      const subset = components.filter(
+        (_, candidateIndex) => candidateIndex !== index
+      );
       const subsetScore = scoreD6Layout(subset, width, height);
 
       if (subsetScore > bestScore + requiredImprovement) {
@@ -484,7 +533,10 @@ function scoreD6Layout(
         continue;
       }
 
-      const distance = Math.hypot(pip.x - pattern[index].x, pip.y - pattern[index].y);
+      const distance = Math.hypot(
+        pip.x - pattern[index].x,
+        pip.y - pattern[index].y
+      );
 
       if (distance < bestDistance) {
         bestDistance = distance;
@@ -499,7 +551,10 @@ function scoreD6Layout(
   }
 
   const meanDistance = totalDistance / components.length;
-  return Math.max(0, 1 - meanDistance / 0.34) * 0.75 + consistencyScore(components) * 0.25;
+  return (
+    Math.max(0, 1 - meanDistance / 0.34) * 0.75 +
+    consistencyScore(components) * 0.25
+  );
 }
 
 function looksLikeFourCorners(
@@ -543,9 +598,21 @@ function findBestFourCornerSubset(
   let bestScore = -Infinity;
 
   for (let first = 0; first < candidatePool.length - 3; first += 1) {
-    for (let second = first + 1; second < candidatePool.length - 2; second += 1) {
-      for (let third = second + 1; third < candidatePool.length - 1; third += 1) {
-        for (let fourth = third + 1; fourth < candidatePool.length; fourth += 1) {
+    for (
+      let second = first + 1;
+      second < candidatePool.length - 2;
+      second += 1
+    ) {
+      for (
+        let third = second + 1;
+        third < candidatePool.length - 1;
+        third += 1
+      ) {
+        for (
+          let fourth = third + 1;
+          fourth < candidatePool.length;
+          fourth += 1
+        ) {
           const subset = [
             candidatePool[first],
             candidatePool[second],
@@ -581,7 +648,11 @@ function findLikelyDieCandidates(
   const quadCandidates = findQuadDieCandidates(grayscale, width, height);
   const squareCandidates = findSquareDieCandidates(grayscale, width, height);
   const brightCandidates = findBrightDieCandidates(grayscale, width, height);
-  const contrastCandidates = findContrastDieCandidates(grayscale, width, height);
+  const contrastCandidates = findContrastDieCandidates(
+    grayscale,
+    width,
+    height
+  );
   const windowCandidates = findWindowDieCandidates(grayscale, width, height);
   const allCandidates = [
     ...quadCandidates,
@@ -600,7 +671,10 @@ function findLikelyDieCandidates(
     const withoutLast = shortlist.slice(0, Math.max(0, MAX_DIE_CANDIDATES - 1));
     shortlist.length = 0;
     shortlist.push(
-      ...dedupeAndRankCandidates([...withoutLast, bestQuadCandidate]).slice(0, MAX_DIE_CANDIDATES)
+      ...dedupeAndRankCandidates([...withoutLast, bestQuadCandidate]).slice(
+        0,
+        MAX_DIE_CANDIDATES
+      )
     );
   }
 
@@ -643,7 +717,13 @@ function findBrightDieCandidates(
   }
 
   const components = findConnectedComponents(brightMask, width, height);
-  return scoreCandidateComponents(components, width, height, "bright", grayscale);
+  return scoreCandidateComponents(
+    components,
+    width,
+    height,
+    "bright",
+    grayscale
+  );
 }
 
 function findSquareDieCandidates(
@@ -689,7 +769,9 @@ function findSquareDieCandidates(
     }
   }
 
-  return candidates.sort((left, right) => right.score - left.score).slice(0, MAX_DIE_CANDIDATES * 2);
+  return candidates
+    .sort((left, right) => right.score - left.score)
+    .slice(0, MAX_DIE_CANDIDATES * 2);
 }
 
 function findQuadDieCandidates(
@@ -741,7 +823,13 @@ function findQuadDieCandidates(
       height,
       0.08
     );
-    const score = scoreQuadCandidate(grayscale, width, height, box, component.fillRatio);
+    const score = scoreQuadCandidate(
+      grayscale,
+      width,
+      height,
+      box,
+      component.fillRatio
+    );
 
     if (score >= 0.24) {
       candidates.push({
@@ -752,7 +840,9 @@ function findQuadDieCandidates(
     }
   }
 
-  return candidates.sort((left, right) => right.score - left.score).slice(0, MAX_DIE_CANDIDATES * 2);
+  return candidates
+    .sort((left, right) => right.score - left.score)
+    .slice(0, MAX_DIE_CANDIDATES * 2);
 }
 
 function findContrastDieCandidates(
@@ -786,7 +876,13 @@ function findContrastDieCandidates(
   }
 
   const components = findConnectedComponents(contrastMask, width, height);
-  return scoreCandidateComponents(components, width, height, "contrast", grayscale);
+  return scoreCandidateComponents(
+    components,
+    width,
+    height,
+    "contrast",
+    grayscale
+  );
 }
 
 function scoreCandidateComponents(
@@ -862,7 +958,9 @@ function scoreCandidateComponents(
     });
   }
 
-  return scoredCandidates.sort((left, right) => right.score - left.score).slice(0, MAX_DIE_CANDIDATES);
+  return scoredCandidates
+    .sort((left, right) => right.score - left.score)
+    .slice(0, MAX_DIE_CANDIDATES);
 }
 
 function findWindowDieCandidates(
@@ -879,12 +977,16 @@ function findWindowDieCandidates(
 
   for (const xOffset of xOffsets) {
     for (const yOffset of yOffsets) {
-      const box = clampBox({
-        x: Math.round(centerX - side / 2 + width * xOffset),
-        y: Math.round(centerY - side / 2 + height * yOffset),
-        width: side,
-        height: side
-      }, width, height);
+      const box = clampBox(
+        {
+          x: Math.round(centerX - side / 2 + width * xOffset),
+          y: Math.round(centerY - side / 2 + height * yOffset),
+          width: side,
+          height: side
+        },
+        width,
+        height
+      );
       const score = scoreWindowCandidate(grayscale, width, height, box);
 
       candidates.push({
@@ -904,7 +1006,7 @@ function findWindowDieCandidates(
 function scoreWindowCandidate(
   grayscale: Uint8Array,
   width: number,
-  height: number,
+  _height: number,
   box: Box
 ): number {
   let localMin = 255;
@@ -978,24 +1080,39 @@ function scoreSquareCandidate(
     }
   }
 
-  if (borderCount === 0 || interiorCount === 0 || interiorBrightnessCount === 0) {
+  if (
+    borderCount === 0 ||
+    interiorCount === 0 ||
+    interiorBrightnessCount === 0
+  ) {
     return 0;
   }
 
   const borderEdgeMean = borderEdgeSum / borderCount;
   const interiorEdgeMean = interiorEdgeSum / interiorCount;
-  const interiorBrightnessMean = interiorBrightnessSum / interiorBrightnessCount;
+  const interiorBrightnessMean =
+    interiorBrightnessSum / interiorBrightnessCount;
   const edgeContrast = Math.max(0, borderEdgeMean - interiorEdgeMean);
   const edgeScore = Math.min(edgeContrast / 34, 1);
-  const interiorBrightnessScore = Math.max(0, Math.min(1, (interiorBrightnessMean - 92) / 120));
+  const interiorBrightnessScore = Math.max(
+    0,
+    Math.min(1, (interiorBrightnessMean - 92) / 120)
+  );
   const sizeRatio = (box.width * box.height) / Math.max(width * height, 1);
   const sizeScore = 1 - Math.min(Math.abs(0.18 - sizeRatio) / 0.18, 1);
   const centerDistance =
-    Math.hypot(box.x + box.width / 2 - width / 2, box.y + box.height / 2 - height / 2) /
-    Math.hypot(width / 2, height / 2);
+    Math.hypot(
+      box.x + box.width / 2 - width / 2,
+      box.y + box.height / 2 - height / 2
+    ) / Math.hypot(width / 2, height / 2);
   const centerScore = 1 - Math.min(centerDistance, 1);
 
-  return edgeScore * 0.42 + interiorBrightnessScore * 0.24 + sizeScore * 0.18 + centerScore * 0.16;
+  return (
+    edgeScore * 0.42 +
+    interiorBrightnessScore * 0.24 +
+    sizeScore * 0.18 +
+    centerScore * 0.16
+  );
 }
 
 function scoreQuadCandidate(
@@ -1007,9 +1124,16 @@ function scoreQuadCandidate(
 ): number {
   const squareScore = scoreSquareCandidate(grayscale, width, height, box);
   const edgeFillScore = 1 - Math.min(Math.abs(0.18 - edgeFillRatio) / 0.18, 1);
-  const interiorBrightnessScore = scoreBoxInteriorBrightness(grayscale, width, height, box);
+  const interiorBrightnessScore = scoreBoxInteriorBrightness(
+    grayscale,
+    width,
+    height,
+    box
+  );
 
-  return squareScore * 0.62 + edgeFillScore * 0.18 + interiorBrightnessScore * 0.2;
+  return (
+    squareScore * 0.62 + edgeFillScore * 0.18 + interiorBrightnessScore * 0.2
+  );
 }
 
 function scoreBoxInteriorBrightness(
@@ -1084,7 +1208,9 @@ function expandBoxToSquare(
   maxHeight: number,
   paddingRatio: number
 ): Box {
-  const side = Math.round(Math.max(box.width, box.height) * (1 + paddingRatio * 2));
+  const side = Math.round(
+    Math.max(box.width, box.height) * (1 + paddingRatio * 2)
+  );
   const centerX = box.x + box.width / 2;
   const centerY = box.y + box.height / 2;
 
@@ -1101,7 +1227,9 @@ function expandBoxToSquare(
 }
 
 function dedupeAndRankCandidates(candidates: DieCandidate[]): DieCandidate[] {
-  const ranked = [...candidates].sort((left, right) => right.score - left.score);
+  const ranked = [...candidates].sort(
+    (left, right) => right.score - left.score
+  );
   const deduped: DieCandidate[] = [];
 
   for (const candidate of ranked) {
@@ -1122,10 +1250,16 @@ function dedupeAndRankCandidates(candidates: DieCandidate[]): DieCandidate[] {
 }
 
 function boxesOverlapByRatio(left: Box, right: Box): number {
-  const overlapWidth =
-    Math.max(0, Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x));
-  const overlapHeight =
-    Math.max(0, Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y));
+  const overlapWidth = Math.max(
+    0,
+    Math.min(left.x + left.width, right.x + right.width) -
+      Math.max(left.x, right.x)
+  );
+  const overlapHeight = Math.max(
+    0,
+    Math.min(left.y + left.height, right.y + right.height) -
+      Math.max(left.y, right.y)
+  );
   const overlapArea = overlapWidth * overlapHeight;
 
   if (overlapArea === 0) {
@@ -1166,13 +1300,20 @@ function analyzeDieCandidate(
       searchImage.height
     )
   ) {
-    const retryBox = buildRetryCropBox(candidate.box, searchImage.width, searchImage.height);
+    const retryBox = buildRetryCropBox(
+      candidate.box,
+      searchImage.width,
+      searchImage.height
+    );
 
     if (!boxesMatch(paddedBox, retryBox)) {
-      const retryResult = analyzeSquareRegion(cropImageData(searchImage, retryBox), [
-        `Search crop ${searchImage.width}x${searchImage.height}`,
-        `${candidate.method} die retry ${candidateIndex + 1}/${candidateCount} ${Math.round(retryBox.width)}x${Math.round(retryBox.height)} at ${Math.round(retryBox.x)},${Math.round(retryBox.y)} after weak primary crop`
-      ]);
+      const retryResult = analyzeSquareRegion(
+        cropImageData(searchImage, retryBox),
+        [
+          `Search crop ${searchImage.width}x${searchImage.height}`,
+          `${candidate.method} die retry ${candidateIndex + 1}/${candidateCount} ${Math.round(retryBox.width)}x${Math.round(retryBox.height)} at ${Math.round(retryBox.x)},${Math.round(retryBox.y)} after weak primary crop`
+        ]
+      );
 
       if (isRetryResultBetter(primaryResult, retryResult)) {
         return retryResult;
@@ -1196,8 +1337,9 @@ function scoreRecognizedCandidate(
         : 0;
   const noteText = result.notes.join(" ").toLowerCase();
   const retryBonus = noteText.includes("die retry") ? 0.08 : 0;
-  const candidateEvidenceBonus =
-    noteText.includes("pip candidates, 0") ? 0 : Math.min(result.pipCount, 6) * 0.05;
+  const candidateEvidenceBonus = noteText.includes("pip candidates, 0")
+    ? 0
+    : Math.min(result.pipCount, 6) * 0.05;
   const edgePenaltyBonus = result.confidence >= 0.55 ? 0.08 : 0;
 
   return (
@@ -1247,7 +1389,10 @@ function buildRetryCropBox(
   const centerY = candidateBox.y + candidateBox.height / 2;
   const side = Math.min(
     Math.max(
-      Math.round(Math.max(candidateBox.width, candidateBox.height) * (1 + RETRY_DIE_PADDING_RATIO * 2)),
+      Math.round(
+        Math.max(candidateBox.width, candidateBox.height) *
+          (1 + RETRY_DIE_PADDING_RATIO * 2)
+      ),
       Math.round(Math.min(searchWidth, searchHeight) * 0.42)
     ),
     Math.min(searchWidth, searchHeight)
@@ -1290,7 +1435,10 @@ function isRetryResultBetter(
     return retryResult.confidence > primaryResult.confidence + 0.08;
   }
 
-  return retryResult.pipCount > primaryResult.pipCount && retryResult.confidence >= primaryResult.confidence;
+  return (
+    retryResult.pipCount > primaryResult.pipCount &&
+    retryResult.confidence >= primaryResult.confidence
+  );
 }
 
 function scoreCandidateInteriorBrightness(
@@ -1425,7 +1573,9 @@ function shouldMergePipComponents(
     return false;
   }
 
-  const areaRatio = Math.max(left.area, right.area) / Math.max(Math.min(left.area, right.area), 1);
+  const areaRatio =
+    Math.max(left.area, right.area) /
+    Math.max(Math.min(left.area, right.area), 1);
 
   if (areaRatio > 2.1) {
     return false;
@@ -1442,9 +1592,7 @@ function shouldMergePipComponents(
   const maxGap = Math.max(horizontalGap, verticalGap);
   const nearTouching = maxGap <= Math.max(2, distanceThreshold * 0.12);
   const overlapping =
-    horizontalGap === 0 &&
-    verticalGap === 0 &&
-    boxesOverlap(left, right);
+    horizontalGap === 0 && verticalGap === 0 && boxesOverlap(left, right);
 
   return nearTouching || overlapping;
 }
@@ -1547,7 +1695,10 @@ function createAdaptiveDarkMask(
   meanBrightness: number
 ): Uint8Array {
   const mask = new Uint8Array(width * height);
-  const windowRadius = Math.max(10, Math.round(Math.min(width, height) * 0.065));
+  const windowRadius = Math.max(
+    10,
+    Math.round(Math.min(width, height) * 0.065)
+  );
   const offset = Math.max(10, Math.min(28, meanBrightness * 0.1));
 
   for (let y = 0; y < height; y += 1) {
@@ -1668,12 +1819,7 @@ function findConnectedComponents(
         sumX += currentX;
         sumY += currentY;
 
-        const neighbors = [
-          index - 1,
-          index + 1,
-          index - width,
-          index + width
-        ];
+        const neighbors = [index - 1, index + 1, index - width, index + width];
 
         for (const neighborIndex of neighbors) {
           if (neighborIndex < 0 || neighborIndex >= mask.length) {
@@ -1683,7 +1829,10 @@ function findConnectedComponents(
           const neighborX = neighborIndex % width;
           const neighborY = Math.floor(neighborIndex / width);
 
-          if (Math.abs(neighborX - currentX) + Math.abs(neighborY - currentY) !== 1) {
+          if (
+            Math.abs(neighborX - currentX) + Math.abs(neighborY - currentY) !==
+            1
+          ) {
             continue;
           }
 

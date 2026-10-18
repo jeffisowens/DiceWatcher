@@ -12,9 +12,7 @@
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
-      "@dicewatcher/shared": [
-        "packages/shared/src/index.ts"
-      ]
+      "@dicewatcher/shared": ["packages/shared/src/index.ts"]
     }
   }
 }
