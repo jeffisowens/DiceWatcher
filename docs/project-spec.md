@@ -137,7 +137,7 @@ Each milestone ends with a demo and its exit criteria checked.
 
 ### M0 — Foundations (small)
 
-- Vitest, ESLint + Prettier (see §9), GitHub Actions running typecheck/lint/test/build.
+- Vitest, Biome (see §9), GitHub Actions running typecheck/lint/test/build.
 - Zod schemas for the contracts above, with tests (range checks, version field).
 - Remove committed build output; fix README; align versions; `debugLogging` default off; Foundry compatibility 13–14.
 - Use community Foundry types instead of the hand-written shim.
@@ -193,7 +193,7 @@ Motion-based auto-capture; d20 and other polyhedrals (likely via a learned model
 |---|---|---|---|
 | Validation | `zod` (or `valibot` if bundle size matters) | Range checks and versioned messages (review C1, C5) | M0 |
 | Tests | Vitest | Shares Vite config; runs vision tests in Node | M0 |
-| Lint/format | ESLint + typescript-eslint + Prettier (or Biome as one tool) | No linting today | M0 |
+| Lint/format | Biome | One fast tool for linting and formatting, including React hooks rules; no linting today | M0 |
 | Foundry types | `@league-of-foundry-developers/foundry-vtt-types` | Replace the hand-written shim. These lag Foundry releases; if v13/v14 coverage is missing, keep a slim shim for just the APIs we use (fulfillment, `Roll`, `ApplicationV2`) | M0 |
 | Transport | `peerjs` | WebRTC data channel with a free hosted broker; self-hostable later | M1 |
 | Pairing | `qrcode` | Render the pairing QR in Foundry. The phone scans with its native camera, so no QR reader is needed | M1 |
