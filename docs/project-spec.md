@@ -137,7 +137,7 @@ Each milestone ends with a demo and its exit criteria checked.
 
 ### M0 — Foundations (small)
 
-- Vitest, ESLint + Prettier, GitHub Actions running typecheck/lint/test/build.
+- Vitest, ESLint + Prettier (see §9), GitHub Actions running typecheck/lint/test/build.
 - Zod schemas for the contracts above, with tests (range checks, version field).
 - Remove committed build output; fix README; align versions; `debugLogging` default off; Foundry compatibility 13–14.
 - Use community Foundry types instead of the hand-written shim.
@@ -177,7 +177,44 @@ Exit: a player who didn't build it can install, pair and play a session.
 
 Motion-based auto-capture; d20 and other polyhedrals (likely via a learned model); mixed dice; free rolls outside a pending request; self-hosted signaling/TURN option.
 
-## 9. Risks
+## 9. Tooling
+
+### 9.1 Keep
+
+| Area | Tool | Why |
+|---|---|---|
+| Monorepo | pnpm workspaces, TypeScript | Already working; no reason to change |
+| Web app | Vite + React | Fine for a small camera/review UI |
+| Module bundling | esbuild | Fast, simple, one output file for Foundry |
+
+### 9.2 Add
+
+| Area | Tool | Why | Milestone |
+|---|---|---|---|
+| Validation | `zod` (or `valibot` if bundle size matters) | Range checks and versioned messages (review C1, C5) | M0 |
+| Tests | Vitest | Shares Vite config; runs vision tests in Node | M0 |
+| Lint/format | ESLint + typescript-eslint + Prettier (or Biome as one tool) | No linting today | M0 |
+| Foundry types | `@league-of-foundry-developers/foundry-vtt-types` | Replace the hand-written shim. These lag Foundry releases; if v13/v14 coverage is missing, keep a slim shim for just the APIs we use (fulfillment, `Roll`, `ApplicationV2`) | M0 |
+| Transport | `peerjs` | WebRTC data channel with a free hosted broker; self-hostable later | M1 |
+| Pairing | `qrcode` | Render the pairing QR in Foundry. The phone scans with its native camera, so no QR reader is needed | M1 |
+| Phone dev | `@vitejs/plugin-basic-ssl` | HTTPS dev server so phones allow the camera | M1 |
+| Fixture decoding | `sharp` (dev only) | Decode JPEG/PNG fixtures to raw RGBA for Node tests | M2 |
+| Worker RPC | `comlink` | Clean async calls into the recognition Web Worker | M3 |
+
+### 9.3 Image processing
+
+The current recognizer uses no library: every step (grayscale, thresholding, connected components, candidate search) is hand-written pixel loops. That is most of why `vision.ts` is 1,700 lines. The original spec named OpenCV.js but it was never adopted.
+
+| Option | Good for | Costs |
+|---|---|---|
+| **OpenCV.js** (`@techstark/opencv-js`) | Classic pipeline: adaptive threshold, `findContours`, `minAreaRect`, `warpPerspective`, `SimpleBlobDetector`/`HoughCircles`. Replaces most of today's hand-written code with tested primitives. Runs in a Worker and in Node. | ~8–10 MB WASM download (cache it); C-style API with manual `Mat.delete()` memory management |
+| **ONNX Runtime Web** (`onnxruntime-web`) + a small YOLO-style detector | Learned detection: finds every die, its type and its top face in one pass. Handles d20 numerals, mixed dice, varied backgrounds. Same model runs in Node via `onnxruntime-node` for tests. WebGPU with WASM fallback. | Needs a labeled dataset and a training step (public dice datasets exist as a starting point); model ~5–15 MB |
+| MediaPipe Tasks Vision / TensorFlow.js | Same role as ONNX | Narrower model export path; ONNX is the more portable target |
+| jsfeat, tracking.js, image-js | Lightweight helpers | Unmaintained or too limited for this job |
+
+**Recommendation.** For M2–M3, port the existing pip pipeline onto OpenCV.js primitives inside the pure recognition core, which should shrink it substantially and make it easier to tune against the harness. Plan on ONNX Runtime Web with a trained detector as the long-term path: d20 support essentially requires it, and the fixture set built in M2 doubles as training and evaluation data. The §6.3 decision point picks the moment to switch. Because the recognizer sits behind one interface (`(pixels, width, height, request) → DieReading[]`), switching engines doesn't touch the app, the module or the contracts.
+
+## 10. Risks
 
 | Risk | Mitigation |
 |---|---|
