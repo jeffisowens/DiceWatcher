@@ -160,7 +160,11 @@ ol {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background:
-    linear-gradient(135deg, rgba(255, 211, 138, 0.08), rgba(255, 159, 107, 0.12)),
+    linear-gradient(
+      135deg,
+      rgba(255, 211, 138, 0.08),
+      rgba(255, 159, 107, 0.12)
+    ),
     rgba(255, 255, 255, 0.03);
 }
 
@@ -441,6 +445,7 @@ ol {
   font-weight: 700;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: unrelated to .analysis-notes p + p; different containers */
 .batch-notes p {
   margin: 0.45rem 0 0;
 }

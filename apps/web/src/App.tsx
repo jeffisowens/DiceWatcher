@@ -1,11 +1,11 @@
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import {
   buildLauncherQuery,
+  createExternalRoll,
   createExternalRollMessage,
-  createMockExternalRoll,
   parseLauncherSession
 } from "@dicewatcher/shared";
-import { recognizeD6FromDataUrl, type D6RecognitionResult } from "./vision";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type D6RecognitionResult, recognizeD6FromDataUrl } from "./vision";
 
 type CameraState = "idle" | "requesting" | "ready" | "blocked" | "error";
 type SendState = "idle" | "sent" | "missing-opener";
@@ -52,7 +52,9 @@ const EMPTY_RESULT: D6RecognitionResult = {
 };
 
 export function App() {
-  const session = parseLauncherSession(new URLSearchParams(window.location.search));
+  const session = parseLauncherSession(
+    new URLSearchParams(window.location.search)
+  );
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -167,12 +169,16 @@ export function App() {
     } catch (error) {
       if (error instanceof DOMException && error.name === "NotAllowedError") {
         setCameraState("blocked");
-        setCameraError("Camera access was blocked. Allow camera permissions and try again.");
+        setCameraError(
+          "Camera access was blocked. Allow camera permissions and try again."
+        );
         return;
       }
 
       setCameraState("error");
-      setCameraError("The camera could not be started on this device or browser.");
+      setCameraError(
+        "The camera could not be started on this device or browser."
+      );
     }
   }
 
@@ -184,7 +190,9 @@ export function App() {
     const video = videoRef.current;
 
     if (video.videoWidth === 0 || video.videoHeight === 0) {
-      setCameraError("The camera preview is not ready yet. Give it a moment and try again.");
+      setCameraError(
+        "The camera preview is not ready yet. Give it a moment and try again."
+      );
       return;
     }
 
@@ -289,25 +297,22 @@ export function App() {
   }
 
   function sendConfirmedRoll() {
-    const confirmedRoll = createMockExternalRoll({
+    const confirmedRoll = createExternalRoll({
       sessionId: session.sessionId,
       userId: session.userId,
-      value: selectedValue
+      value: selectedValue,
+      confidence: recognitionResult.confidence,
+      corrected: recognitionResult.value !== selectedValue
     });
 
-    if (!window.opener) {
+    if (!window.opener || !session.foundryOrigin) {
       setSendState("missing-opener");
       return;
     }
 
-    const targetOrigin = session.foundryOrigin ?? "*";
-
     window.opener.postMessage(
-      createExternalRollMessage({
-        ...confirmedRoll,
-        corrected: recognitionResult.value !== selectedValue
-      }),
-      targetOrigin
+      createExternalRollMessage(confirmedRoll),
+      session.foundryOrigin
     );
     setSendState("sent");
   }
@@ -390,9 +395,12 @@ export function App() {
     );
   }
 
-  const analyzedBatchRows = batchRows.filter((row) => row.analysisState === "done");
+  const analyzedBatchRows = batchRows.filter(
+    (row) => row.analysisState === "done"
+  );
   const matchedBatchRows = analyzedBatchRows.filter(
-    (row) => row.detectedValue !== null && row.detectedValue === row.expectedValue
+    (row) =>
+      row.detectedValue !== null && row.detectedValue === row.expectedValue
   );
   const perFaceSummary = D6_VALUES.map((value) => {
     const rows = analyzedBatchRows.filter((row) => row.expectedValue === value);
@@ -406,7 +414,7 @@ export function App() {
   });
 
   const pairingPreview = buildLauncherQuery(session).toString();
-  const payloadPreview = createMockExternalRoll({
+  const payloadPreview = createExternalRoll({
     sessionId: session.sessionId,
     userId: session.userId,
     value: selectedValue
@@ -416,11 +424,14 @@ export function App() {
     <main className="app-shell">
       <section className="hero">
         <p className="eyebrow">DiceWatcher MVP</p>
-        <h1>Capture one d6, review the detected result, then send the confirmed roll.</h1>
+        <h1>
+          Capture one d6, review the detected result, then send the confirmed
+          roll.
+        </h1>
         <p className="lede">
-          This first recognition prototype assumes one die in the center of the frame
-          and counts likely dark pips from a saved image crop. Manual correction stays
-          available for every result.
+          This first recognition prototype assumes one die in the center of the
+          frame and counts likely dark pips from a saved image crop. Manual
+          correction stays available for every result.
         </p>
         <dl className="session-grid">
           <div>
@@ -515,9 +526,13 @@ export function App() {
 
         {cameraError ? <p className="status warning">{cameraError}</p> : null}
         <p className="status">
-          Source: {captureSource === "camera" ? "Live camera" : captureSource === "upload" ? "Uploaded fixture" : "None"}.
-          {" "}
-          Active image: {captureLabel}
+          Source:{" "}
+          {captureSource === "camera"
+            ? "Live camera"
+            : captureSource === "upload"
+              ? "Uploaded fixture"
+              : "None"}
+          . Active image: {captureLabel}
         </p>
       </section>
 
@@ -526,12 +541,14 @@ export function App() {
           <div>
             <h2>Recognition review</h2>
             <p>
-              The prototype analyzes a center crop, counts pip-like dark components,
-              and suggests a `d6` result with confidence.
+              The prototype analyzes a center crop, counts pip-like dark
+              components, and suggests a `d6` result with confidence.
             </p>
           </div>
           <span className={`chip chip-${analysisState}`}>
-            {analysisState === "done" ? `${Math.round(recognitionResult.confidence * 100)}%` : analysisState}
+            {analysisState === "done"
+              ? `${Math.round(recognitionResult.confidence * 100)}%`
+              : analysisState}
           </span>
         </div>
 
@@ -541,7 +558,7 @@ export function App() {
             <div className="analysis-value">
               {analysisState === "running"
                 ? "Analyzing..."
-                : recognitionResult.value ?? "No confident result"}
+                : (recognitionResult.value ?? "No confident result")}
             </div>
           </div>
           <div className="analysis-card">
@@ -558,7 +575,9 @@ export function App() {
           </div>
         </div>
 
-        {analysisError ? <p className="status warning">{analysisError}</p> : null}
+        {analysisError ? (
+          <p className="status warning">{analysisError}</p>
+        ) : null}
         {recognitionResult.notes.length > 0 ? (
           <div className="analysis-notes">
             {recognitionResult.notes.map((note) => (
@@ -634,15 +653,19 @@ export function App() {
           Send confirmed roll to Foundry
         </button>
         {!capturedImage ? (
-          <p className="status">Capture a frame before sending a confirmed roll.</p>
+          <p className="status">
+            Capture a frame before sending a confirmed roll.
+          </p>
         ) : null}
         {sendState === "sent" ? (
-          <p className="status success">Confirmed roll posted to the Foundry window.</p>
+          <p className="status success">
+            Confirmed roll posted to the Foundry window.
+          </p>
         ) : null}
         {sendState === "missing-opener" ? (
           <p className="status warning">
-            No opener window was found. Open this page from the DiceWatcher Foundry
-            launcher popup to send the result.
+            No Foundry window was found. Open this page from the DiceWatcher
+            Foundry launcher popup to send the result.
           </p>
         ) : null}
       </section>
@@ -663,8 +686,8 @@ export function App() {
           <div>
             <h2>Batch evaluator</h2>
             <p>
-              Upload a set of fixture images, let DiceWatcher analyze them all at once,
-              then label expected faces and review the batch summary.
+              Upload a set of fixture images, let DiceWatcher analyze them all
+              at once, then label expected faces and review the batch summary.
             </p>
           </div>
           <div className="results-actions">
@@ -768,10 +791,10 @@ export function App() {
             <div className="table-shell">
               <table className="results-table">
                 <thead>
-                <tr>
-                  <th>Image</th>
-                  <th>Expected</th>
-                  <th>Detected</th>
+                  <tr>
+                    <th>Image</th>
+                    <th>Expected</th>
+                    <th>Detected</th>
                     <th>Confidence</th>
                     <th>Pips</th>
                     <th>Status</th>
@@ -907,7 +930,9 @@ export function App() {
                     <td>{run.confirmedValue}</td>
                     <td>{Math.round(run.confidence * 100)}%</td>
                     <td>{run.pipCount}</td>
-                    <td className={run.matched ? "result-match" : "result-miss"}>
+                    <td
+                      className={run.matched ? "result-match" : "result-miss"}
+                    >
                       {run.matched ? "match" : "miss"}
                     </td>
                   </tr>

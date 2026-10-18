@@ -53,7 +53,11 @@ Phones only allow camera access on HTTPS. The web app is deployed to GitHub Page
 
 No recognition change merges without numbers. A committed, labeled fixture set and a Node test report accuracy, and CI fails on regression. The recognizer is a pure function `(pixels, width, height, request) → DieReading[]` with no DOM access.
 
-### 3.5 Unchanged from the original plan
+### 3.5 Foundry v14
+
+The module targets Foundry VTT v14, the current release. Older versions are not supported.
+
+### 3.6 Unchanged from the original plan
 
 - d6 first, still capture first, user confirmation required, controlled tray/background expected.
 
@@ -139,7 +143,7 @@ Each milestone ends with a demo and its exit criteria checked.
 
 - Vitest, Biome (see §9), GitHub Actions running typecheck/lint/test/build.
 - Zod schemas for the contracts above, with tests (range checks, version field).
-- Remove committed build output; fix README; align versions; `debugLogging` default off; Foundry compatibility 13–14.
+- Remove committed build output; fix README; align versions; `debugLogging` default off; Foundry compatibility set to v14 (minimum and verified).
 - Use community Foundry types instead of the hand-written shim.
 
 Exit: CI green on a PR.
@@ -194,7 +198,7 @@ Motion-based auto-capture; d20 and other polyhedrals (likely via a learned model
 | Validation | `zod` (or `valibot` if bundle size matters) | Range checks and versioned messages (review C1, C5) | M0 |
 | Tests | Vitest | Shares Vite config; runs vision tests in Node | M0 |
 | Lint/format | Biome | One fast tool for linting and formatting, including React hooks rules; no linting today | M0 |
-| Foundry types | `@league-of-foundry-developers/foundry-vtt-types` | Replace the hand-written shim. These lag Foundry releases; if v13/v14 coverage is missing, keep a slim shim for just the APIs we use (fulfillment, `Roll`, `ApplicationV2`) | M0 |
+| Foundry types | `@league-of-foundry-developers/foundry-vtt-types` | Replace the hand-written shim. These lag Foundry releases; if v14 coverage is missing, keep a slim shim for just the APIs we use (fulfillment, `Roll`, `ApplicationV2`) | M0 |
 | Transport | `peerjs` | WebRTC data channel with a free hosted broker; self-hostable later | M1 |
 | Pairing | `qrcode` | Render the pairing QR in Foundry. The phone scans with its native camera, so no QR reader is needed | M1 |
 | Phone dev | `@vitejs/plugin-basic-ssl` | HTTPS dev server so phones allow the camera | M1 |
@@ -219,7 +223,7 @@ The current recognizer uses no library: every step (grayscale, thresholding, con
 | Risk | Mitigation |
 |---|---|
 | WebRTC fails behind some NATs without TURN | M1 spike tests real networks first; relay fallback ready |
-| Fulfillment API changes between Foundry versions | Pin compatibility, test on 13 and 14, keep the adapter small |
+| Fulfillment API changes between Foundry versions | Target v14 only, re-verify on each Foundry release, keep the adapter small |
 | Heuristic CV plateaus below target | Harness makes it visible early; §6.3 decision point |
 | Lighting/background variability | Fixtures deliberately cover it; MVP requires a tray |
 | Players distrust self-reported rolls | Confirmation and correction flag on the card; optional snapshot audit |

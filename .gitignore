@@ -7,3 +7,4 @@ coverage/
 .vite/
 *.tsbuildinfo
 
+apps/foundry-module/package/
