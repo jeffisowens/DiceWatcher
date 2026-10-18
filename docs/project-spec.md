@@ -1,424 +1,188 @@
 # DiceWatcher Project Spec
 
+_Rewritten October 2026 after an engineering review. The reasoning behind each change is in [review-2026-10.md](./review-2026-10.md)._
+
 ## 1. Goal
 
-Build a system that allows a player to roll physical dice in front of a device camera, detect the result, and send that result into Foundry VTT so it can be used in place of Foundry's built-in digital dice rolling.
+A player rolls physical dice in front of a phone or webcam, and the results flow into Foundry VTT's own dice system, so any roll a game system makes (attacks, damage, saves) can be fulfilled with real dice.
 
-The first version should prioritize reliability and development speed over breadth.
+## 2. Product shape
 
-## 2. Product Direction
+Three packages, as today:
 
-### 2.1 Product shape
+1. **Camera web app** (`apps/web`): a static site hosted over HTTPS. Captures frames, recognizes dice, lets the player confirm, sends results.
+2. **Foundry module** (`apps/foundry-module`): registers a DiceWatcher dice fulfillment method, owns pairing, validates and feeds results into pending rolls. Does no computer vision.
+3. **Shared** (`packages/shared`): message schemas with runtime validation, pairing protocol, and a pure (DOM-free) recognition core so it can be tested in Node.
 
-DiceWatcher will be split into two applications:
+## 3. Locked decisions
 
-1. A browser-based camera web app
-2. A Foundry VTT module
+These are the decisions the rest of the plan depends on. Changing one means revisiting this document.
 
-These applications will share TypeScript types and message contracts through a shared package.
+### 3.1 Foundry owns the roll (fulfillment API)
 
-### 2.2 Why this shape
-
-- Mobile browsers are better suited for camera capture than embedding everything in Foundry.
-- Foundry integration can stay focused on pairing, validation, and roll creation.
-- The camera stack and the Foundry stack can evolve independently.
-- Shared contracts reduce integration drift.
-
-## 3. MVP Definition
-
-### 3.1 In scope
-
-- One die type: `d6`
-- One roll at a time
-- Camera preview in browser
-- Manual capture button
-- Still-image analysis after capture
-- User confirmation or correction before send
-- Foundry module receives result and posts it as an external roll/chat message
-- Basic session pairing between browser client and Foundry user/session
-
-### 3.2 Out of scope
-
-- Auto-detecting any common polyhedral die
-- Full motion-based automatic roll completion
-- Multiple dice types in the same roll
-- No-confirmation fully automatic roll submission
-- Handling arbitrary table backgrounds and poor lighting
-- Complex Foundry workflow replacement for every game system on day one
-
-## 4. User Flow
-
-### 4.1 Player flow
-
-1. Player opens DiceWatcher on a phone or laptop browser.
-2. Player pairs the browser app to a Foundry session.
-3. Player places one `d6` in a defined tray or capture area.
-4. Player taps `Capture`.
-5. App freezes the frame and analyzes the image.
-6. App shows detected value with confidence.
-7. Player confirms or corrects the value.
-8. App sends the confirmed result to Foundry.
-9. Foundry posts the roll result to chat and/or creates an external roll event.
-
-### 4.2 GM flow
-
-1. GM installs and enables the DiceWatcher Foundry module.
-2. GM or player opens the module panel inside Foundry.
-3. Foundry displays pairing instructions and connection status.
-4. External roll results appear in Foundry as trusted or reviewable events depending on configuration.
-
-## 5. System Architecture
-
-## 5.1 Monorepo layout
-
-```text
-DiceWatcher/
-  apps/
-    web/
-    foundry-module/
-  packages/
-    shared/
-  docs/
-    project-spec.md
-```
-
-## 5.2 Applications
-
-### `apps/web`
-
-Responsibilities:
-
-- Camera permission flow
-- Live preview
-- Capture region UI
-- Snapshot capture
-- Vision pipeline execution
-- Result review and correction
-- Pairing and transport to Foundry
-
-Suggested stack:
-
-- React
-- TypeScript
-- Vite
-- CSS or Tailwind if desired
-- OpenCV.js for initial computer vision pipeline
-
-### `apps/foundry-module`
-
-Responsibilities:
-
-- Register module and settings
-- Create pairing/session UI
-- Receive external roll payloads
-- Validate session/token/user routing
-- Convert incoming payloads into Foundry chat messages and/or roll objects
-- Display connection and recent external roll status
-
-Suggested stack:
-
-- TypeScript
-- Vite or Foundry-compatible bundler
-- Foundry module manifest and scripts
-
-### `packages/shared`
-
-Responsibilities:
-
-- Shared type definitions
-- Message/event names
-- Payload schemas
-- Validation helpers
-
-Suggested stack:
-
-- TypeScript
-- Zod for runtime validation
-
-## 6. Integration Model
-
-## 6.1 Transport
-
-For MVP, the system needs a simple real-time or request-response transport between the web app and Foundry.
-
-Preferred order:
-
-1. WebSocket bridge if easy to host within the module or companion process
-2. HTTP POST endpoint if simpler operationally
-
-MVP recommendation:
-
-- Use a small explicit session model
-- Pair a browser app instance with a Foundry user/session
-- Require a session token before accepting rolls
-
-## 6.2 Roll contract
+The module registers a fulfillment method:
 
 ```ts
-export type DieKind = "d6";
-
-export type DieResult = {
-  id: string;
-  kind: DieKind;
-  value: number;
-  confidence: number;
-};
-
-export type ExternalRollPayload = {
-  sessionId: string;
-  userId?: string;
-  source: "camera-web";
-  dice: DieResult[];
-  total: number;
-  imageTimestamp: string;
-  corrected: boolean;
+CONFIG.Dice.fulfillment.methods.dicewatcher = {
+  label: "DiceWatcher (camera)",
+  icon: "<i class=\"fa-solid fa-camera\"></i>",
+  interactive: true
 };
 ```
 
-Possible future fields:
+Players pick DiceWatcher per die type in Foundry's Dice Configuration. When a roll needs those dice, Foundry opens its `RollResolver`; the module tells the paired camera what is pending (e.g. `2×d6`); confirmed results come back and are fed in with `Roll.registerResult("dicewatcher", "d6", value)`. The system then evaluates the roll normally, so roll modes, chat cards, Dice So Nice and system automation all work. Manual entry in the resolver is the built-in fallback.
 
-- snapshot reference
-- roll mode
-- actorId
-- itemId
-- formula
-- systemId
+The camera never invents a roll on its own in the MVP; it only answers a pending request. (A "free roll" mode can come later.)
 
-## 7. Computer Vision Strategy
+### 3.2 Transport: WebRTC data channel, paired by QR code
 
-## 7.1 MVP assumptions
+`window.postMessage` cannot reach a phone. The MVP transport is a peer-to-peer WebRTC data channel between the player's Foundry client and the camera app:
 
-To keep V1 practical, the vision pipeline will assume:
+- The Foundry module shows a QR code containing the web app URL, a peer id and a one-time pairing secret.
+- The camera app connects using a public signaling broker (PeerJS cloud to start; self-hostable later), then proves the secret before any roll message is accepted.
+- No DiceWatcher server to run. Works whether Foundry is self-hosted, on a VPS, or on a host like Forge, because the connection is between the two browsers.
+- The existing popup/`postMessage` path stays as the same-device webcam transport behind the same message interface.
 
-- One `d6` in frame
-- Contrasting tray/background
-- Reasonable lighting
-- User-triggered still capture
-- Review step before submission
+A spike (Milestone 1) must confirm this works across a phone on cellular data and a desktop on home Wi-Fi. If NAT traversal without TURN proves unreliable, fall back to a tiny relay (one WebSocket room per pairing) before building anything else on top.
 
-## 7.2 Initial detection path
+### 3.3 Hosting: static HTTPS
 
-For the first prototype, avoid OCR. Count pips instead.
+Phones only allow camera access on HTTPS. The web app is deployed to GitHub Pages from CI. Local development on a phone uses Vite with a self-signed cert (`@vitejs/plugin-basic-ssl`) or a tunnel.
 
-Pipeline:
+### 3.4 Vision is measured, not eyeballed
 
-1. Capture still frame
-2. Crop to tray region
-3. Convert to grayscale
-4. Apply blur/threshold
-5. Detect contours
-6. Identify candidate square-ish die region
-7. Normalize perspective
-8. Detect circular dark/light pip regions
-9. Count pips
-10. Return value and confidence
+No recognition change merges without numbers. A committed, labeled fixture set and a Node test report accuracy, and CI fails on regression. The recognizer is a pure function `(pixels, width, height, request) → DieReading[]` with no DOM access.
 
-## 7.3 Why `d6` first
+### 3.5 Unchanged from the original plan
 
-- Easier shape detection
-- Pip counting is simpler than numeral OCR
-- Faster prototype feedback
-- Better chance of reliable demo-quality results
+- d6 first, still capture first, user confirmation required, controlled tray/background expected.
 
-## 7.4 Expansion path after MVP
+## 4. User flow (MVP)
 
-1. Multiple `d6`s
-2. Motion-based auto-capture
-3. `d20` support
-4. Mixed dice sets
-5. Stronger ML-assisted detection/classification
+1. GM enables the module. Each player sets d6 fulfillment to "DiceWatcher" in Dice Configuration.
+2. Player clicks **Pair camera** in Foundry, scans the QR code with their phone (or clicks **Use this computer's webcam**).
+3. Player triggers any roll in Foundry. In the MVP only d6 terms route to DiceWatcher; other dice use Foundry's digital dice.
+4. Foundry's resolver opens; the phone shows "Roll 2 d6".
+5. Player rolls, taps **Capture**. The app shows what it saw with confidence and the debug overlay on demand.
+6. Player confirms or corrects each die and taps **Send**.
+7. Values fill the resolver; the roll completes in Foundry like any other.
 
-## 8. Foundry Responsibilities
+## 5. Contracts
 
-The Foundry module should not do computer vision. It should focus on trusted ingestion and user-facing integration.
+Validated with Zod in `packages/shared`. Every message is versioned.
 
-Core responsibilities:
+```ts
+type DieKind = "d6"; // widened later: "d4" | "d8" | "d10" | "d12" | "d20"
 
-- Pairing flow
-- Connection state
-- Roll acceptance policy
-- Chat message creation
-- Optional roll object generation
-- Optional external roll history panel
+// Foundry → camera
+type RollRequest = {
+  v: 1;
+  type: "roll-request";
+  requestId: string;
+  dice: { kind: DieKind; count: number }[];
+};
 
-Module settings to consider:
+// camera → Foundry
+type RollFulfillment = {
+  v: 1;
+  type: "roll-fulfillment";
+  requestId: string;
+  dice: {
+    kind: DieKind;
+    value: number;        // validated against kind: 1..faces
+    confidence: number;   // 0..1, from the recognizer
+    corrected: boolean;   // player changed the recognizer's value
+  }[];
+};
 
-- Require confirmation in web app
-- Allow only paired users
-- Show external roll badge in chat
-- GM approval mode on/off
+// pairing
+type PairHello = { v: 1; type: "pair-hello"; secret: string; client: "camera-web" };
+type PairAck  = { v: 1; type: "pair-ack"; userId: string; userName: string };
+```
 
-## 9. Security and Trust
+Totals are never sent; Foundry computes them. The module rejects a fulfillment whose dice don't match the open request.
 
-This project effectively injects roll results into Foundry, so trust rules matter.
+## 6. Vision strategy
 
-MVP rules:
+### 6.1 MVP (d6 pips)
 
-- Only accept rolls from paired sessions
-- Use short-lived session token or pairing code
-- Tie incoming rolls to a specific Foundry user
-- Log recent external roll submissions
+Keep the existing pip-counting pipeline but restructure it:
 
-Future options:
+- Extract a pure core from `vision.ts` into `packages/shared` (or a new `packages/vision`); a thin browser adapter does canvas/image loading.
+- Run it in a Web Worker in the app.
+- Prune candidate strategies that the fixture report shows don't earn their keep.
+- Support N d6 in frame (the request says how many to expect, which is a strong prior).
 
-- Snapshot retention for audit trail
-- GM-side approval queue
-- Confidence threshold warnings
+### 6.2 Fixture set and harness
 
-## 10. Milestones
+- `fixtures/d6/<value>/<name>.jpg` plus a manifest (die color, background, lighting, device).
+- Start with at least 150 images: 3+ dice colors, 2 backgrounds, 2 lighting setups, phone and webcam, single and multiple dice.
+- `pnpm test:vision` prints per-value accuracy, a confusion matrix and "confident but wrong" count; CI fails if accuracy drops below the committed baseline.
+- The in-app fixture/batch tools move to a separate dev route (`/bench`) and can save captures in the fixture format.
 
-## Milestone 0: Repo setup
+### 6.3 Decision point: heuristics vs. a learned model
 
-Deliverables:
+After Milestone 3, compare against the target (≥98% correct at the confidence threshold, <1% confident-but-wrong). If heuristics fall short, or when starting d20 (numerals, where pip counting doesn't apply), switch to a small detector/classifier run in the browser (ONNX Runtime Web or TF.js), trained on the same fixture set. The harness and contracts stay the same either way, which is the point of building them first.
 
-- Monorepo initialized
-- Shared package initialized
-- Web app scaffold created
-- Foundry module scaffold created
-- Basic docs committed
+## 7. Trust and security
 
-Exit criteria:
+- Rolls accepted only from a paired peer that proved the one-time secret; secret rotates per pairing and expires after a few minutes unused.
+- Results only fill a pending request for the user who owns the Foundry client; there is no path for one player's camera to roll for another.
+- Values range-checked per die kind; mismatched counts rejected.
+- Chat card notes "DiceWatcher" and whether any die was corrected. Optional GM setting: snapshot thumbnail attached to the roll for audit.
 
-- Project builds
-- Packages reference each other correctly
+## 8. Milestones
 
-## Milestone 1: Foundry bridge with mock data
+Each milestone ends with a demo and its exit criteria checked.
 
-Deliverables:
+### M0 — Foundations (small)
 
-- Module loads in Foundry
-- Pairing/session stub exists
-- Mock external roll payload can be submitted
-- Foundry posts result to chat
+- Vitest, ESLint + Prettier, GitHub Actions running typecheck/lint/test/build.
+- Zod schemas for the contracts above, with tests (range checks, version field).
+- Remove committed build output; fix README; align versions; `debugLogging` default off; Foundry compatibility 13–14.
+- Use community Foundry types instead of the hand-written shim.
 
-Exit criteria:
+Exit: CI green on a PR.
 
-- Manual test proves end-to-end message ingestion without CV
+### M1 — Fulfillment + transport spike (with manual input)
 
-## Milestone 2: Camera app without CV
+- Module registers the fulfillment method and hooks the `RollResolver`.
+- QR pairing and WebRTC data channel between Foundry and the web app; popup transport kept for same-device webcam.
+- Web app deployed to GitHub Pages; shows pending request and lets the player type values (no CV yet).
 
-Deliverables:
+Exit: from a phone on cellular data, a `2d6` attack roll triggered in Foundry (dnd5e) is fulfilled with typed values and appears as a normal roll card with Dice So Nice.
 
-- Camera preview works
-- Capture button works
-- Review UI works
-- Manual value input works
-- Confirmed values send to Foundry
+### M2 — Vision harness
 
-Exit criteria:
+- Pure recognition core extracted and running in Node.
+- Fixture set (≥150 images) committed; `pnpm test:vision` and CI baseline.
+- Dev bench route for capturing new fixtures.
 
-- Phone or desktop browser can submit a manual external `d6` result
+Exit: CI reports current accuracy of the existing pipeline on the full fixture set.
 
-## Milestone 3: Single `d6` recognition
+### M3 — d6 recognition in the loop
 
-Deliverables:
+- Recognizer in a Web Worker, multi-d6 support, wired into the request → capture → confirm → send flow.
+- Improve the pipeline against the harness until targets are met, or trigger the §6.3 decision.
 
-- Still-frame image processing
-- Candidate die detection
-- Pip counting
-- Confidence scoring
+Exit: ≥98% correct on fixtures with <1% confident-but-wrong; 20 consecutive real rolls from a phone into Foundry with no more than 1 correction.
 
-Exit criteria:
+### M4 — MVP polish
 
-- Controlled-environment `d6` detection is accurate enough for repeated local tests
+- Pairing persistence and reconnect, clear error states, ApplicationV2 status panel, recent roll history, module packaging and release workflow (manifest URL on GitHub Releases).
 
-## Milestone 4: MVP polish
+Exit: a player who didn't build it can install, pair and play a session.
 
-Deliverables:
+### Later
 
-- Better pairing UX
-- Error messages
-- Recent roll history
-- Retry flows
-- Basic styling
+Motion-based auto-capture; d20 and other polyhedrals (likely via a learned model); mixed dice; free rolls outside a pending request; self-hosted signaling/TURN option.
 
-Exit criteria:
+## 9. Risks
 
-- A player can reliably perform repeated confirmed `d6` rolls from browser to Foundry
-
-## 11. Suggested Task Breakdown
-
-### Foundation
-
-- Initialize workspace
-- Set up package manager workspaces
-- Configure TypeScript base config
-- Add linting and formatting
-- Add shared package
-
-### Foundry
-
-- Create module manifest
-- Register settings
-- Build pairing panel
-- Implement mock payload receiver
-- Implement chat/roll creation adapter
-
-### Web
-
-- Build landing/pairing screen
-- Build camera permission and preview screen
-- Add capture overlay
-- Add capture/review flow
-- Add send-to-Foundry client
-
-### Vision
-
-- Add frame preprocessing utilities
-- Add tray crop utilities
-- Add contour detection experiment
-- Add pip detection experiment
-- Add confidence heuristic
-
-## 12. Technical Recommendations
-
-### Monorepo tooling
-
-- Package manager: `pnpm`
-- Language: TypeScript
-- Validation: `zod`
-- Frontend: React + Vite
-
-### Testing
-
-- Unit tests for shared contracts
-- Unit tests for simple Foundry payload adapters where possible
-- Saved-image fixture tests for CV pipeline
-
-### Logging
-
-- Browser debug panel in dev mode
-- Module-side debug logging toggle
-
-## 13. Risks
-
-Top project risks:
-
-- Lighting variability
-- Dice touching tray edges or partial occlusion
-- Low-confidence false positives
-- Difficulty mapping external results cleanly into all Foundry game systems
-- Mobile browser performance for repeated analysis
-
-Mitigations:
-
-- Narrow MVP assumptions
-- Require confirmation step
-- Start with controlled image fixtures
-- Validate Foundry bridge with mock data before CV work
-
-## 14. Immediate Next Steps
-
-1. Initialize the monorepo structure.
-2. Scaffold `apps/web`, `apps/foundry-module`, and `packages/shared`.
-3. Define the shared roll payload schema.
-4. Implement a mock-roll path from web app to Foundry.
-5. Only then begin the first `d6` image-processing prototype.
-
-## 15. Locked decisions for now
-
-- Separate browser app and Foundry module
-- `d6` first
-- Manual capture first
-- User confirmation required in MVP
-- Controlled tray/background expected in MVP
+| Risk | Mitigation |
+|---|---|
+| WebRTC fails behind some NATs without TURN | M1 spike tests real networks first; relay fallback ready |
+| Fulfillment API changes between Foundry versions | Pin compatibility, test on 13 and 14, keep the adapter small |
+| Heuristic CV plateaus below target | Harness makes it visible early; §6.3 decision point |
+| Lighting/background variability | Fixtures deliberately cover it; MVP requires a tray |
+| Players distrust self-reported rolls | Confirmation and correction flag on the card; optional snapshot audit |
