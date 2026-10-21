@@ -10,7 +10,7 @@ The phone loads the camera app from GitHub Pages. It has to be the M1 version, w
 
 1. In the GitHub repo, open **Settings → Pages** and set **Source** to **GitHub Actions**.
 2. Open **Settings → Environments → github-pages**. Under **Deployment branches and tags**, add the PR branch (`claude/project-thread-qo0xfr`). By default Pages only deploys from `main`.
-3. Open **Actions → Deploy web app → Run workflow**, choose the PR branch, and run it.
+3. Open **Actions → Deploy web app**. Every push to the PR branch runs this workflow, so a run should already be listed. If it failed because steps 1–2 weren't done yet, open it and click **Re-run all jobs**.
 4. When the run is green, open <https://jeffisowens.github.io/DiceWatcher/> on your phone. You should see **"Pair from Foundry to start."**
 
 After the PR merges, every push to `main` redeploys the app, and you can remove the branch from step 2.

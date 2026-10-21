@@ -2,7 +2,9 @@ name: Deploy web app
 
 on:
   push:
-    branches: [main]
+    # The PR branch is listed only so M1 can be tested from a phone before
+    # merge; drop it when the PR is marked ready.
+    branches: [main, claude/project-thread-qo0xfr]
   workflow_dispatch:
 
 permissions:
