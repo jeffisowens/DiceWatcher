@@ -153,7 +153,7 @@ export function checkPairHello(
   hello: PairHello,
   now: number
 ): HelloVerdict {
-  if (!constantTimeEqual(ticket.secret, hello.secret)) {
+  if (!secretsMatch(ticket.secret, hello.secret)) {
     return "wrong-secret";
   }
 
@@ -164,7 +164,8 @@ export function checkPairHello(
   return now > ticket.expiresAt ? "expired" : "accepted";
 }
 
-function constantTimeEqual(a: string, b: string): boolean {
+// Compares secrets without leaking how many leading characters match.
+export function secretsMatch(a: string, b: string): boolean {
   if (a.length !== b.length) {
     return false;
   }

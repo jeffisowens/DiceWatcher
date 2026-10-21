@@ -46,7 +46,8 @@ describe("parseProtocolMessage", () => {
         v: 1,
         type: "pair-ack",
         userId: "u1",
-        userName: "Jo"
+        userName: "Jo",
+        resumeToken: "r".repeat(32)
       })?.type
     ).toBe("pair-ack");
   });
@@ -137,5 +138,20 @@ describe("closed and rejected messages", () => {
         outcome: "lost"
       })
     ).toBeNull();
+  });
+});
+
+describe("heartbeat messages", () => {
+  it("parses ping with or without a request, and pong", () => {
+    expect(
+      parseProtocolMessage({ v: 1, type: "ping", requestId: null })?.type
+    ).toBe("ping");
+    expect(
+      parseProtocolMessage({ v: 1, type: "ping", requestId: "r1" })?.type
+    ).toBe("ping");
+    expect(parseProtocolMessage({ v: 1, type: "pong" })?.type).toBe("pong");
+    expect(parseProtocolMessage({ v: 1, type: "pair-end" })?.type).toBe(
+      "pair-end"
+    );
   });
 });

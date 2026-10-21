@@ -104,6 +104,8 @@ type OpenRequest = { resolver: ResolverLike; request: RollRequest };
 export class ResolverBridge {
   #events: BridgeEvents;
   #open = new Map<string, OpenRequest>();
+  // Outcomes of recently closed requests, by request id.
+  #closed = new Map<string, RollClosed["outcome"]>();
 
   constructor(events: BridgeEvents) {
     this.#events = events;
@@ -164,6 +166,27 @@ export class ResolverBridge {
   onMessage(message: ProtocolMessage) {
     if (message.type === "roll-fulfillment") {
       this.#fulfill(message);
+    } else if (message.type === "ping") {
+      this.#sync(message.requestId);
+    }
+  }
+
+  // The camera reports what it is showing on every ping. Resend a request it
+  // missed, and repeat the outcome of one it is still showing after it closed.
+  #sync(showing: string | null) {
+    const current = this.current;
+
+    if (showing && showing !== current?.requestId) {
+      this.#events.send({
+        v: PROTOCOL_VERSION,
+        type: "roll-closed",
+        requestId: showing,
+        outcome: this.#closed.get(showing) ?? "cancelled"
+      });
+    }
+
+    if (current && showing !== current.requestId) {
+      this.#events.send(current);
     }
   }
 
@@ -225,6 +248,12 @@ export class ResolverBridge {
     }
 
     this.#open.delete(resolverId);
+    this.#closed.set(open.request.requestId, outcome);
+
+    if (this.#closed.size > 20) {
+      this.#closed.delete(this.#closed.keys().next().value ?? "");
+    }
+
     this.#events.send({
       v: PROTOCOL_VERSION,
       type: "roll-closed",

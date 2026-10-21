@@ -7,7 +7,7 @@ import {
   type RollRequest
 } from "@dicewatcher/shared";
 import { useEffect, useRef, useState } from "react";
-import { type CameraLink, connect } from "./connection";
+import { CameraSession, loadResumeLink } from "./session";
 
 // The camera app as Foundry drives it: pair from the QR link, show what
 // Foundry is waiting for, and send the player's values back. Values are typed
@@ -17,8 +17,8 @@ type Phase =
   | { kind: "no-link" }
   | { kind: "connecting" }
   | { kind: "paired"; userName: string }
-  | { kind: "closed" }
-  | { kind: "error"; message: string };
+  | { kind: "reconnecting" }
+  | { kind: "ended"; message: string };
 
 type Pending = {
   request: RollRequest;
@@ -38,18 +38,26 @@ export function App() {
   const [phase, setPhase] = useState<Phase>({ kind: "connecting" });
   const [pending, setPending] = useState<Pending | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const linkRef = useRef<CameraLink | null>(null);
+  const sessionRef = useRef<CameraSession | null>(null);
   const pendingRef = useRef<Pending | null>(null);
   const startedRef = useRef(false);
 
   pendingRef.current = pending;
+
+  const showing = pending?.request.requestId ?? null;
+
+  useEffect(() => {
+    if (sessionRef.current) sessionRef.current.showing = showing;
+  }, [showing]);
+
+  useWakeLock(phase.kind === "paired" || phase.kind === "reconnecting");
 
   useEffect(() => {
     // StrictMode runs effects twice; a pairing secret only works once.
     if (startedRef.current) return;
     startedRef.current = true;
 
-    const link = parsePairingLink(window.location.hash);
+    const link = parsePairingLink(window.location.hash) ?? loadResumeLink();
 
     // Keep the one-time secret out of history and bookmarks.
     history.replaceState(null, "", window.location.pathname);
@@ -95,22 +103,16 @@ export function App() {
       }
     };
 
-    connect(link, {
+    const session = new CameraSession(link, {
       onMessage,
-      onClose: () => {
-        linkRef.current = null;
-        setPending(null);
-        setPhase({ kind: "closed" });
+      onStatus: (status) => {
+        if (status.kind === "ended") setPending(null);
+        setPhase(status);
       }
-    }).then(
-      (cameraLink) => {
-        linkRef.current = cameraLink;
-        setPhase({ kind: "paired", userName: cameraLink.ack.userName });
-      },
-      (error: Error) => setPhase({ kind: "error", message: error.message })
-    );
+    });
 
-    window.addEventListener("pagehide", () => linkRef.current?.close());
+    sessionRef.current = session;
+    session.start();
   }, []);
 
   function choose(index: number, value: number) {
@@ -128,13 +130,17 @@ export function App() {
   }
 
   function send() {
-    const link = linkRef.current;
+    const session = sessionRef.current;
 
-    if (!link || !pending || pending.values.some((value) => value === null)) {
+    if (
+      !session ||
+      !pending ||
+      pending.values.some((value) => value === null)
+    ) {
       return;
     }
 
-    link.send({
+    const sent = session.send({
       v: PROTOCOL_VERSION,
       type: "roll-fulfillment",
       requestId: pending.request.requestId,
@@ -146,7 +152,9 @@ export function App() {
         corrected: true
       }))
     });
-    setPending({ ...pending, status: "sent" });
+    if (sent) {
+      setPending({ ...pending, status: "sent" });
+    }
   }
 
   return (
@@ -157,7 +165,7 @@ export function App() {
         <p className="lede">{detail(phase)}</p>
       </section>
 
-      {phase.kind === "paired" && pending ? (
+      {(phase.kind === "paired" || phase.kind === "reconnecting") && pending ? (
         <section className="panel">
           <h2>
             Roll{" "}
@@ -200,6 +208,7 @@ export function App() {
           <button
             className="action"
             disabled={
+              phase.kind !== "paired" ||
               pending.status === "sent" ||
               pending.values.some((value) => value === null)
             }
@@ -240,10 +249,10 @@ function heading(phase: Phase, pending: Pending | null): string {
       return "Connecting to Foundry…";
     case "paired":
       return pending ? "Foundry is waiting for your roll." : "Ready to roll.";
-    case "closed":
-      return "Disconnected from Foundry.";
-    case "error":
-      return "Could not pair.";
+    case "reconnecting":
+      return "Reconnecting to Foundry…";
+    case "ended":
+      return "Not connected to Foundry.";
   }
 }
 
@@ -255,9 +264,43 @@ function detail(phase: Phase): string {
       return "Checking the pairing code with your Foundry window.";
     case "paired":
       return `Paired with ${phase.userName || "Foundry"}. Make any roll in Foundry that uses DiceWatcher dice and it will show up here.`;
-    case "closed":
-      return "Foundry closed the connection. Pair again from the DiceWatcher panel.";
-    case "error":
+    case "reconnecting":
+      return "The connection dropped, probably while the screen was off. Getting it back; no need to scan again.";
+    case "ended":
       return phase.message;
   }
+}
+
+// Keeps the phone's screen on while paired, so the browser does not pause
+// the page between rolls. Re-acquired when the page becomes visible again,
+// since browsers release the lock when it is hidden.
+function useWakeLock(active: boolean) {
+  useEffect(() => {
+    if (!active || !("wakeLock" in navigator)) return;
+
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+
+    const acquire = () => {
+      if (document.visibilityState !== "visible") return;
+      navigator.wakeLock.request("screen").then(
+        (sentinel) => {
+          if (cancelled) void sentinel.release();
+          else lock = sentinel;
+        },
+        () => {
+          // Not allowed (e.g. low battery mode); the heartbeat still recovers.
+        }
+      );
+    };
+
+    acquire();
+    document.addEventListener("visibilitychange", acquire);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", acquire);
+      void lock?.release();
+    };
+  }, [active]);
 }

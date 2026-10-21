@@ -7,7 +7,8 @@ import {
   PROTOCOL_VERSION,
   type ProtocolMessage,
   parseProtocolMessage,
-  type SignalingServer
+  type SignalingServer,
+  secretsMatch
 } from "@dicewatcher/shared";
 import Peer, { type DataConnection } from "peerjs";
 
@@ -17,6 +18,11 @@ import Peer, { type DataConnection } from "peerjs";
 
 const HELLO_TIMEOUT_MS = 10_000;
 const POPUP_POLL_MS = 1000;
+// The camera pings every few seconds; a peer link silent this long is dead
+// even if WebRTC has not noticed yet (e.g. a phone that went to sleep).
+const LINK_TIMEOUT_MS = 15_000;
+const SIGNALING_RETRY_MS = 5000;
+const END_GRACE_MS = 500;
 
 export type Transport = "peer" | "window";
 
@@ -44,6 +50,7 @@ type ActiveLink = {
   transport: Transport;
   send(message: ProtocolMessage): void;
   close(): void;
+  lastSeen: number;
 };
 
 export class PairingHost {
@@ -54,10 +61,14 @@ export class PairingHost {
   #link: ActiveLink | null = null;
   #popup: Window | null = null;
   #popupTimer: ReturnType<typeof setInterval> | null = null;
+  // Issued to the paired camera so it can reconnect without a new QR code.
+  // Lives until Disconnect, a fresh pairing, or this page closes.
+  #resumeToken: string | null = null;
 
   constructor(options: PairingHostOptions) {
     this.#options = options;
     window.addEventListener("message", (event) => this.#onWindowMessage(event));
+    setInterval(() => this.#checkLiveness(), LINK_TIMEOUT_MS / 3);
   }
 
   get state(): HostState {
@@ -145,11 +156,20 @@ export class PairingHost {
   }
 
   disconnect(): void {
+    const link = this.#link;
+    const peer = this.#peer;
+
     this.#ticket = null;
-    this.#link?.close();
+    this.#resumeToken = null;
     this.#link = null;
-    this.#peer?.destroy();
     this.#peer = null;
+
+    if (link) {
+      endLink(link);
+    }
+
+    // Give the pair-end message time to leave before the peer goes.
+    setTimeout(() => peer?.destroy(), END_GRACE_MS);
     this.#setState({ kind: "idle" });
   }
 
@@ -184,6 +204,14 @@ export class PairingHost {
 
     this.#peer = peer;
     peer.on("connection", (connection) => this.#onPeerConnection(connection));
+    peer.on("disconnected", () => {
+      // Losing the signaling server leaves open links up but stops a dropped
+      // camera from finding us again, so keep trying to get back.
+      setTimeout(() => {
+        if (peer.open || peer.destroyed || this.#peer !== peer) return;
+        peer.reconnect();
+      }, SIGNALING_RETRY_MS);
+    });
 
     try {
       const id = await waitForOpen(peer);
@@ -207,7 +235,8 @@ export class PairingHost {
       send: (outgoing) => {
         void connection.send(outgoing);
       },
-      close: () => connection.close()
+      close: () => connection.close(),
+      lastSeen: Date.now()
     };
     let accepted = false;
 
@@ -228,7 +257,7 @@ export class PairingHost {
       }
 
       if (message) {
-        this.#options.onMessage(message);
+        this.#receive(link, message);
       }
     });
 
@@ -256,7 +285,8 @@ export class PairingHost {
       return;
     }
 
-    if (this.#link?.transport !== "window") {
+    // A hello always goes through pairing, so a reloaded popup can resume.
+    if (this.#link?.transport !== "window" || message.type === "pair-hello") {
       if (this.#accept(message, "window")) {
         const popup = this.#popup;
         const origin = event.origin;
@@ -264,27 +294,58 @@ export class PairingHost {
         this.#replaceLink({
           transport: "window",
           send: (outgoing) => popup.postMessage(outgoing, origin),
-          close: () => popup.close()
+          close: () => popup.close(),
+          lastSeen: Date.now()
         });
       }
       return;
     }
 
+    this.#receive(this.#link, message);
+  }
+
+  #receive(link: ActiveLink, message: ProtocolMessage) {
+    link.lastSeen = Date.now();
+
+    if (message.type === "ping") {
+      link.send({ v: PROTOCOL_VERSION, type: "pong" });
+    }
+
     this.#options.onMessage(message);
   }
 
-  // Checks the first message from a camera. Only a pair-hello carrying the
-  // live, unused secret is accepted.
-  #accept(message: ProtocolMessage, transport: Transport): boolean {
-    const ticket = this.#ticket;
+  #checkLiveness() {
+    const link = this.#link;
 
-    if (message.type !== "pair-hello" || !ticket) {
+    if (
+      link?.transport === "peer" &&
+      Date.now() - link.lastSeen > LINK_TIMEOUT_MS
+    ) {
+      this.#options.log?.("[DiceWatcher] Camera stopped answering.");
+      link.close();
+      this.#dropLink(link);
+    }
+  }
+
+  // Checks the first message from a camera. Only a pair-hello carrying the
+  // live, unused secret from the QR code, or the paired camera's resume
+  // token, is accepted.
+  #accept(message: ProtocolMessage, transport: Transport): boolean {
+    if (message.type !== "pair-hello") {
       return false;
     }
 
-    const verdict = checkPairHello(ticket, message, Date.now());
+    if (this.#resumeToken && secretsMatch(this.#resumeToken, message.secret)) {
+      this.#options.log?.(`[DiceWatcher] Camera reconnected (${transport}).`);
+      return true;
+    }
 
-    if (verdict !== "accepted") {
+    const ticket = this.#ticket;
+    const verdict = ticket
+      ? checkPairHello(ticket, message, Date.now())
+      : "expired";
+
+    if (!ticket || verdict !== "accepted") {
       this.#options.log?.(`[DiceWatcher] Refused ${transport} pairing.`, {
         verdict
       });
@@ -292,6 +353,8 @@ export class PairingHost {
     }
 
     ticket.used = true;
+    this.#ticket = null;
+    this.#resumeToken = generateSecret();
 
     return true;
   }
@@ -300,14 +363,21 @@ export class PairingHost {
     const previous = this.#link;
 
     this.#link = link;
-    previous?.close();
-    this.#ticket = null;
+
+    // A window link replacing a window link is the same popup, reloaded.
+    if (
+      previous &&
+      !(previous.transport === "window" && link.transport === "window")
+    ) {
+      endLink(previous);
+    }
 
     link.send({
       v: PROTOCOL_VERSION,
       type: "pair-ack",
       userId: this.#options.user.id,
-      userName: this.#options.user.name
+      userName: this.#options.user.name,
+      resumeToken: this.#resumeToken ?? ""
     });
     this.#setState({ kind: "paired", transport: link.transport });
   }
@@ -318,7 +388,12 @@ export class PairingHost {
     }
 
     this.#link = null;
-    this.#setState({ kind: "idle", error: "The camera disconnected." });
+    this.#setState({
+      kind: "idle",
+      error: this.#resumeToken
+        ? "Lost the camera. It reconnects by itself while its page is open."
+        : "The camera disconnected."
+    });
   }
 
   #watchPopup() {
@@ -354,6 +429,13 @@ export class PairingHost {
     this.#state = state;
     this.#options.onState(state);
   }
+}
+
+// Tells a camera its pairing is over, then closes the link once the message
+// has had time to arrive.
+function endLink(link: ActiveLink) {
+  link.send({ v: PROTOCOL_VERSION, type: "pair-end" });
+  setTimeout(() => link.close(), END_GRACE_MS);
 }
 
 function waitForOpen(peer: Peer): Promise<string> {

@@ -213,3 +213,53 @@ function fakeInput(
     }
   } as unknown as HTMLInputElement;
 }
+
+describe("ResolverBridge sync on ping", () => {
+  const ping = (requestId: string | null): ProtocolMessage => ({
+    v: 1,
+    type: "ping",
+    requestId
+  });
+
+  it("resends the open request to a camera that missed it", () => {
+    const { bridge, sent } = setup();
+    bridge.onRender(fakeResolver("a", [slot("d6")]).resolver);
+
+    bridge.onMessage(ping(null));
+
+    expect(sent.map((message) => message.type)).toEqual([
+      "roll-request",
+      "roll-request"
+    ]);
+  });
+
+  it("stays quiet when the camera shows the open request", () => {
+    const { bridge, sent } = setup();
+    bridge.onRender(fakeResolver("a", [slot("d6")]).resolver);
+    const { requestId } = sent[0] as { requestId: string };
+
+    bridge.onMessage(ping(requestId));
+    bridge.onMessage(ping(null));
+    sent.length = 0;
+    bridge.onMessage(ping(requestId));
+
+    expect(sent).toEqual([]);
+  });
+
+  it("repeats how a request the camera still shows was closed", () => {
+    const { bridge, sent } = setup();
+    const { resolver } = fakeResolver("a", [slot("d6")]);
+    bridge.onRender(resolver);
+    const { requestId } = sent[0] as { requestId: string };
+    bridge.onMessage(fulfillment(requestId, [4]));
+    sent.length = 0;
+
+    bridge.onMessage(ping(requestId));
+    bridge.onMessage(ping("unknown"));
+
+    expect(sent).toEqual([
+      { v: 1, type: "roll-closed", requestId, outcome: "fulfilled" },
+      { v: 1, type: "roll-closed", requestId: "unknown", outcome: "cancelled" }
+    ]);
+  });
+});

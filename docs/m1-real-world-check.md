@@ -35,7 +35,8 @@ Copy `apps/foundry-module/package/dicewatcher` into your Foundry user data folde
 3. In **Manage Modules**, enable **DiceWatcher** and **Dice So Nice!**.
 4. In **Configure Settings → DiceWatcher**, check that **Camera app URL** is `https://jeffisowens.github.io/DiceWatcher/` and **Pairing server** is blank. Turn on **debug logging**, which helps if something fails.
 5. In **Configure Settings → Core → Dice Configuration**, set **d6** to **DiceWatcher (camera)**. Leave every other die on its default.
-6. Give a character a weapon that deals 2d6 damage, such as a greatsword.
+6. In **Configure Settings → Dice So Nice!**, turn off **Disabled for manually entered rolls**. It's on by default, and it makes Dice So Nice skip the 3D animation for any roll whose dice were all entered from outside Foundry, which includes DiceWatcher.
+7. Give a character a weapon that deals 2d6 damage, such as a greatsword.
 
 ## 4. Pair the phone over cellular
 
@@ -43,6 +44,8 @@ Copy `apps/foundry-module/package/dicewatcher` into your Foundry user data folde
 2. In Foundry, the DiceWatcher panel is in the bottom-right corner. Click **Pair phone**.
 3. Scan the QR code with the phone's camera app and open the link.
 4. The phone should say **"Ready to roll."** and **"Paired with <your user name>"**. The Foundry panel should say **"Camera paired"**.
+
+The phone keeps its screen on while paired. If the screen goes off anyway, or you switch apps, the phone shows **"Reconnecting to Foundry…"** when you come back and picks up any roll it missed, with no new scan. Foundry's panel shows **"Lost the camera"** while it's away.
 
 ## 5. Roll and fulfill
 
@@ -61,7 +64,8 @@ That completes the exit check.
 
 - **Typing in Foundry still works.** Roll damage again, type both values into Foundry's resolver, and submit. The phone should say **"Foundry no longer needs that roll."**
 - **Closing the resolver.** Roll again and close the resolver window. The phone should clear its request the same way.
-- **One-time code.** Open the same QR link a second time. That page should say **"Could not pair."**
+- **One-time code.** Open the same QR link in a different browser. That page should say **"Foundry refused the pairing."**
+- **Sleep and wake.** While paired, lock the phone for 30 seconds, roll damage in Foundry, then unlock. Within a few seconds the phone should reconnect and show the roll.
 - **Webcam fallback.** Click **Use this computer's webcam**. A popup opens and pairs, and the phone shows **"Disconnected from Foundry."** Rolls now go to the popup.
 
 ## If something goes wrong

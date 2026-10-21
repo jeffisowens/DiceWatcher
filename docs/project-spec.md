@@ -112,10 +112,16 @@ type RollRejected = { v: 1; type: "roll-rejected"; requestId: string; reason: st
 
 // pairing
 type PairHello = { v: 1; type: "pair-hello"; secret: string; client: "camera-web" };
-type PairAck  = { v: 1; type: "pair-ack"; userId: string; userName: string };
+type PairAck  = { v: 1; type: "pair-ack"; userId: string; userName: string; resumeToken: string };
+type PairEnd  = { v: 1; type: "pair-end" }; // Foundry → camera: stop reconnecting
+
+// heartbeat: camera → Foundry every few seconds; Foundry answers pong, resends a
+// request the camera missed, and closes one the camera still shows
+type Ping = { v: 1; type: "ping"; requestId: string | null };
+type Pong = { v: 1; type: "pong" };
 ```
 
-Pairing links put `peer`, `secret` and an optional `signal` server in the URL fragment, so the secret never reaches the web host. Values typed by the player are sent with `confidence: 0` and `corrected: true`.
+Pairing links put `peer`, `secret` and an optional `signal` server in the URL fragment, so the secret never reaches the web host. A camera that drops (a phone screen turning off) reconnects by sending its `resumeToken` as the `pair-hello` secret; the token lasts until Disconnect, a new pairing or a Foundry reload. Values typed by the player are sent with `confidence: 0` and `corrected: true`.
 
 Totals are never sent; Foundry computes them. The module rejects a fulfillment whose dice don't match the open request.
 

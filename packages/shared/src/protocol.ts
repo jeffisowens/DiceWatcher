@@ -57,7 +57,10 @@ export const pairAckSchema = z.object({
   v: versionSchema,
   type: z.literal("pair-ack"),
   userId: z.string().min(1),
-  userName: z.string()
+  userName: z.string(),
+  // Lets the camera reconnect (in a pair-hello's secret) after the link drops,
+  // for as long as this Foundry page stays open.
+  resumeToken: z.string().min(16)
 });
 
 export type PairAck = z.infer<typeof pairAckSchema>;
@@ -84,13 +87,38 @@ export const rollRejectedSchema = z.object({
 
 export type RollRejected = z.infer<typeof rollRejectedSchema>;
 
+// Camera → Foundry heartbeat, carrying the request the camera is showing so
+// Foundry can resend a missed request or close a stale one.
+export const pingSchema = z.object({
+  v: versionSchema,
+  type: z.literal("ping"),
+  requestId: z.string().min(1).nullable()
+});
+
+export type Ping = z.infer<typeof pingSchema>;
+
+export const pongSchema = z.object({
+  v: versionSchema,
+  type: z.literal("pong")
+});
+
+// Foundry → camera: this pairing is over (Disconnect, or another camera
+// paired). The camera should stop reconnecting.
+export const pairEndSchema = z.object({
+  v: versionSchema,
+  type: z.literal("pair-end")
+});
+
 export const protocolMessageSchema = z.discriminatedUnion("type", [
   rollRequestSchema,
   rollFulfillmentSchema,
   rollClosedSchema,
   rollRejectedSchema,
   pairHelloSchema,
-  pairAckSchema
+  pairAckSchema,
+  pingSchema,
+  pongSchema,
+  pairEndSchema
 ]);
 
 export type ProtocolMessage = z.infer<typeof protocolMessageSchema>;

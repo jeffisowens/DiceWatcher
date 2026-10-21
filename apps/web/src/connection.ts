@@ -24,6 +24,17 @@ export type LinkHandlers = {
   onClose(): void;
 };
 
+// Why connect() failed. `refused` means Foundry answered and said no (the
+// code or resume token is not valid), so retrying will not help.
+export class PairingError extends Error {
+  readonly refused: boolean;
+
+  constructor(message: string, refused = false) {
+    super(message);
+    this.refused = refused;
+  }
+}
+
 type RawLink = {
   send(message: ProtocolMessage): void;
   close(): void;
@@ -47,7 +58,7 @@ export function connect(
     };
 
     const timer = setTimeout(
-      () => fail(new Error("Foundry did not answer. Is the code still valid?")),
+      () => fail(new PairingError("Foundry did not answer.")),
       PAIR_TIMEOUT_MS
     );
 
@@ -72,7 +83,12 @@ export function connect(
       if (ack) {
         handlers.onClose();
       } else {
-        fail(new Error("Foundry refused the pairing. Scan a fresh code."));
+        fail(
+          new PairingError(
+            "Foundry refused the pairing. Scan a fresh code.",
+            true
+          )
+        );
       }
     };
 
@@ -89,7 +105,9 @@ export function connect(
           ? dialPeer(link, hello, onData, onClose, fail)
           : openerLink(link.foundryOrigin, hello, onData, onClose);
     } catch (error) {
-      fail(error instanceof Error ? error : new Error(String(error)));
+      fail(
+        error instanceof PairingError ? error : new PairingError(String(error))
+      );
     }
   });
 }
@@ -105,7 +123,7 @@ function dialPeer(
   let connection: DataConnection | null = null;
 
   peer.on("error", (error) =>
-    fail(new Error(`Could not reach Foundry: ${error.message}`))
+    fail(new PairingError(`Could not reach Foundry: ${error.message}`))
   );
   peer.on("open", () => {
     const dialed = peer.connect(link.peerId, {
@@ -119,7 +137,7 @@ function dialPeer(
     });
     dialed.on("data", onData);
     dialed.on("close", onClose);
-    dialed.on("error", (error) => fail(error));
+    dialed.on("error", (error) => fail(new PairingError(error.message)));
   });
 
   return {
@@ -139,8 +157,9 @@ function openerLink(
   const opener = window.opener as Window | null;
 
   if (!opener) {
-    throw new Error(
-      "This page was not opened from Foundry. Use the DiceWatcher panel there."
+    throw new PairingError(
+      "This page was not opened from Foundry. Use the DiceWatcher panel there.",
+      true
     );
   }
 
