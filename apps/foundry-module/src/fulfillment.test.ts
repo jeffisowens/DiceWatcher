@@ -183,3 +183,33 @@ describe("ResolverBridge", () => {
     expect(sent).toMatchObject([{ type: "roll-request" }]);
   });
 });
+
+describe("readPendingSlots from the form", () => {
+  it("reads method and denomination from the input or its ancestors", () => {
+    const form = {
+      querySelectorAll: () => [
+        fakeInput("", { method: METHOD_ID }, { denomination: "d6" }),
+        fakeInput("4", { method: METHOD_ID }, { denomination: "d6" }),
+        fakeInput("", { method: METHOD_ID }, { denomination: "d6" })
+      ]
+    } as unknown as HTMLElement;
+
+    expect(
+      readPendingSlots({ id: "a", element: form, registerResult: () => true })
+    ).toEqual([slot("d6"), slot("d6")]);
+  });
+});
+
+function fakeInput(
+  value: string,
+  ...datasets: Record<string, string>[]
+): HTMLInputElement {
+  return {
+    value,
+    closest: (selector: string) => {
+      const key = selector === "[data-method]" ? "method" : "denomination";
+      const dataset = datasets.find((d) => key in d);
+      return dataset ? { dataset } : null;
+    }
+  } as unknown as HTMLInputElement;
+}

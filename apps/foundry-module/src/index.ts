@@ -2,6 +2,7 @@ import { parseSignalingServer } from "@dicewatcher/shared";
 import {
   ResolverBridge,
   type ResolverLike,
+  readPendingSlots,
   registerFulfillmentMethod
 } from "./fulfillment";
 import { PairingHost } from "./pairing-host";
@@ -105,6 +106,10 @@ function start() {
   render();
 
   Hooks.on("renderRollResolver", (resolver: ResolverLike) => {
+    logDebug("[DiceWatcher] Roll resolver rendered.", {
+      slots: readPendingSlots(resolver),
+      fulfillable: [...(resolver.fulfillable?.values() ?? [])]
+    });
     bridge.onRender(resolver);
     render();
   });

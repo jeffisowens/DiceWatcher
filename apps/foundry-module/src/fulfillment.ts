@@ -58,30 +58,11 @@ export function requestedDice(slots: PendingSlot[]): RollRequest["dice"] {
   return [...counts].map(([kind, count]) => ({ kind, count }));
 }
 
-// Reads the open slots from the rendered resolver form: one enabled, empty
-// input per result, labelled with its method and denomination. This is the
-// same markup Foundry's own registerResult fills. Falls back to the
-// fulfillable terms when the markup is not found.
+// Reads the open slots from the resolver. Foundry's own list of fulfillable
+// terms comes first; the rendered form (one empty input per result, with its
+// method and denomination on the input or an enclosing element) is the
+// fallback.
 export function readPendingSlots(resolver: ResolverLike): PendingSlot[] {
-  const inputs = resolver.element?.querySelectorAll<HTMLInputElement>(
-    "[data-method][data-denomination] input:not([disabled])"
-  );
-
-  if (inputs && inputs.length > 0) {
-    return Array.from(inputs)
-      .filter((input) => input.value === "")
-      .map((input) => {
-        const label = input.closest<HTMLElement>(
-          "[data-method][data-denomination]"
-        );
-
-        return {
-          method: label?.dataset.method ?? "",
-          denomination: label?.dataset.denomination ?? ""
-        };
-      });
-  }
-
   const slots: PendingSlot[] = [];
 
   for (const { method, term } of resolver.fulfillable?.values() ?? []) {
@@ -90,7 +71,22 @@ export function readPendingSlots(resolver: ResolverLike): PendingSlot[] {
     }
   }
 
-  return slots;
+  if (slots.length > 0) {
+    return slots;
+  }
+
+  const inputs =
+    resolver.element?.querySelectorAll<HTMLInputElement>("input") ?? [];
+
+  return Array.from(inputs)
+    .filter((input) => input.value === "")
+    .map((input) => ({
+      method: input.closest<HTMLElement>("[data-method]")?.dataset.method ?? "",
+      denomination:
+        input.closest<HTMLElement>("[data-denomination]")?.dataset
+          .denomination ?? ""
+    }))
+    .filter((slot) => slot.method !== "" && slot.denomination !== "");
 }
 
 function sameDice(a: RollRequest["dice"], b: RollRequest["dice"]): boolean {
