@@ -46,7 +46,8 @@ describe("parseProtocolMessage", () => {
         v: 1,
         type: "pair-ack",
         userId: "u1",
-        userName: "Jo"
+        userName: "Jo",
+        resumeToken: "r".repeat(32)
       })?.type
     ).toBe("pair-ack");
   });
@@ -105,5 +106,52 @@ describe("fulfillmentMatchesRequest", () => {
       ]
     };
     expect(fulfillmentMatchesRequest(split, fulfillment([1, 2, 3]))).toBe(true);
+  });
+});
+
+describe("closed and rejected messages", () => {
+  it("parses roll-closed and roll-rejected", () => {
+    expect(
+      parseProtocolMessage({
+        v: 1,
+        type: "roll-closed",
+        requestId: "r1",
+        outcome: "fulfilled"
+      })?.type
+    ).toBe("roll-closed");
+    expect(
+      parseProtocolMessage({
+        v: 1,
+        type: "roll-rejected",
+        requestId: "r1",
+        reason: "Wrong number of dice."
+      })?.type
+    ).toBe("roll-rejected");
+  });
+
+  it("rejects an unknown close outcome", () => {
+    expect(
+      parseProtocolMessage({
+        v: 1,
+        type: "roll-closed",
+        requestId: "r1",
+        outcome: "lost"
+      })
+    ).toBeNull();
+  });
+});
+
+describe("heartbeat messages", () => {
+  it("parses ping with or without a request, and pong", () => {
+    expect(
+      parseProtocolMessage({ v: 1, type: "ping", requestId: null })?.type
+    ).toBe("ping");
+    expect(
+      parseProtocolMessage({ v: 1, type: "ping", requestId: "r1" })?.type
+    ).toBe("ping");
+    expect(parseProtocolMessage({ v: 1, type: "pong" })?.type).toBe("pong");
+    expect(parseProtocolMessage({ v: 1, type: "pair-end" })?.type).toBe(
+      "pair-end"
+    );
   });
 });

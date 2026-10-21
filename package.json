@@ -10,6 +10,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "dev:web": "pnpm --filter @dicewatcher/web dev",
+    "dev:phone": "pnpm --filter @dicewatcher/web dev:phone",
     "build:web": "pnpm --filter @dicewatcher/web build",
     "build:foundry": "pnpm --filter @dicewatcher/foundry-module build",
     "typecheck": "pnpm -r typecheck",

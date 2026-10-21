@@ -1,7 +1,7 @@
 {
   "id": "dicewatcher",
   "title": "DiceWatcher",
-  "description": "Accepts external physical dice results from the DiceWatcher web app.",
+  "description": "Fulfills Foundry dice rolls with physical dice read by a phone or webcam.",
   "version": "0.2.0",
   "compatibility": {
     "minimum": "14",
