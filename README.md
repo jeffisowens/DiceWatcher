@@ -48,4 +48,4 @@ To try a local camera app, set the module's **camera app URL** setting to your d
 
 ## Next steps
 
-See the milestones in [docs/project-spec.md](docs/project-spec.md#8-milestones). M1 (fulfillment and phone pairing with typed values) is in place; its exit check on a real phone over cellular data is still to do. Next is M2, the vision harness.
+See the milestones in [docs/project-spec.md](docs/project-spec.md#8-milestones). M1 (fulfillment and phone pairing with typed values) is in place; its exit check on a real phone over cellular data is still to do ([steps](docs/m1-real-world-check.md)). Next is M2, the vision harness.
